@@ -35,6 +35,12 @@
     <ClInclude Include="Camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\shader.frag">
@@ -62,6 +68,9 @@
       <Filter>Resource Files\Shaders</Filter>
     </None>
     <None Include="shaders\materialmap.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\lighting.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
   </ItemGroup>

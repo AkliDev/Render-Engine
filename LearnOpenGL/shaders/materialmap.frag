@@ -36,7 +36,7 @@ uniform vec3 objectColor;
 
 void main()
 {
-        // ambient
+    // ambient
     vec3 ambient = light.ambient * texture(material.diffuse, TexCoords).rgb;
     
     // diffuse 
