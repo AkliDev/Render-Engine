@@ -67,7 +67,7 @@ int main()
 	Shader lampShader("shaders/vertex.vert", "shaders/color.frag");
 
 
-	Model ourModel("models/nanosuit/nanosuit.obj");
+	Model ourModel("models/Ridley/ridley.obj");
 
 	stbi_set_flip_vertically_on_load(true);
 	
@@ -139,13 +139,11 @@ int main()
 		lightingShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
 		lightingShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
-	
 		lightingShader.setMat4("model", model);
 		lightingShader.setMat4("view", view);
 		lightingShader.setMat4("projection", projection);
-		lightingShader.setMat4("model", model);
-		// render the loaded model
-			
+
+		// render the loaded model			
 		model = glm::translate(model, glm::vec3(0.0f, -1.75f, 0.0f)); // translate it down so it's at the center of the scene
 		model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));	// it's a bit too big for our scene, so scale it down
 		lightingShader.setMat4("model", model);
