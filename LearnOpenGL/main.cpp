@@ -13,6 +13,8 @@
 
 #include "Model.h"
 
+#include "Utility/Headers/PRNG.h";
+
 //callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -33,9 +35,9 @@ float lastFrame = 0.0f; // Time of last frame
 
 Camera myCamera;
 
-
 int main()
 {
+	SetSeed();
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -60,14 +62,12 @@ int main()
 		return -1;
 	}
 
-	glEnable(GL_DEPTH_TEST);
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	Shader lightingShader("shaders/vertex.vert", "shaders/lighting.frag");
-	Shader lampShader("shaders/vertex.vert", "shaders/color.frag");
+	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
 
-
-	Model ourModel("models/Ridley/ridley.obj");
+	Model ourModel("models/Zero/Zero.FBX");
 
 	stbi_set_flip_vertically_on_load(true);
 	
@@ -75,12 +75,20 @@ int main()
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_STENCIL_TEST);
+	glEnable(GL_BLEND);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	// render loop
 	while (!glfwWindowShouldClose(window))
 	{
-		float currentFrame = glfwGetTime();
-		deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
+		float currentTime = glfwGetTime();
+		deltaTime = currentTime - lastFrame;
+		lastFrame = currentTime;
 
 		// input
 		processInput(window);
@@ -88,18 +96,19 @@ int main()
 		//rendering commands here
 		//glClearColor(0.0f, 0.65f, 0.55f, 1.0f); //Appelblauwzeegroen
 		glClearColor(0.06f, 0.10f, 0.11f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 		//ModelViewProjectionMatricis 
 		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::rotate(model, glm::radians(currentFrame * 0), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 view = glm::mat4(1.0f);
 		glm::mat4 projection = glm::mat4(1.0f);
+		model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		// note that we're translating the scene in the reverse direction of where we want to move
 		view = glm::lookAt(myCamera.Position, myCamera.Position + myCamera.Front, myCamera.Up);
 		projection = glm::perspective(glm::radians(myCamera.Zoom), (float)SCR_HEIGHT / (float)SCR_HEIGHT, 0.1f, 100.0f);
 
-		glm::vec3 lightPos(1.2f * glm::cos(currentFrame), 0.0f, -2.0f *glm::sin(currentFrame));
+		glm::vec3 lightPos(1.2f * glm::cos(currentTime), 2.0f, -2.0f *glm::sin(currentTime));
+
 		lightingShader.use();
 		//lightingShader.setVec3("objectColor", glm::vec3(0.0f, 0.65f, 0.55f));
 		lightingShader.setVec3("objectColor", glm::vec3(1.0f));
@@ -115,7 +124,7 @@ int main()
 		glm::vec3 diffuseColor = lightColor * glm::vec3(1.0f); // decrease the influence
 		glm::vec3 ambientColor = diffuseColor * glm::vec3(0.1f); // low influence
 
-		lightingShader.setVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+		lightingShader.setVec3("dirLight.direction",0, 0, -1.0f);
 		lightingShader.setVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
 		lightingShader.setVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
 		lightingShader.setVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
@@ -139,17 +148,39 @@ int main()
 		lightingShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
 		lightingShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
+		model = glm::translate(model, glm::vec3(0.0f, -1.75f, 0.0f)); // translate it down so it's at the center of the scene
+		model = glm::scale(model, glm::vec3(0.2));	// it's a bit too big for our scene, so scale it down
+
 		lightingShader.setMat4("model", model);
 		lightingShader.setMat4("view", view);
 		lightingShader.setMat4("projection", projection);
 
-		// render the loaded model			
-		model = glm::translate(model, glm::vec3(0.0f, -1.75f, 0.0f)); // translate it down so it's at the center of the scene
-		model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));	// it's a bit too big for our scene, so scale it down
-		lightingShader.setMat4("model", model);
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		glStencilMask(0xFF);
+		
 		ourModel.Draw(lightingShader);
 
+		glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+		glStencilMask(0x00);
+		glDisable(GL_DEPTH_TEST);
+
 		
+		float a = (glm::cos(currentTime * 40 + getRandomNumber(0, 0.5f)) * 0.5f + 0.5f) * 0.6f;
+		float b = (glm::sin(currentTime * 8) * 0.5f + 0.5f) * 1.2;
+		float c = b + a;
+		float scale = c * 0.07f + 1.0f;
+		model = glm::scale(model, glm::vec3(scale));
+
+		colorShader.use();
+		colorShader.setMat4("model", model);
+		colorShader.setMat4("view", view);
+		colorShader.setMat4("projection", projection);
+		colorShader.setVec3("color", glm::vec3(1, 1, 1));
+		ourModel.Draw(colorShader);
+
+		glStencilMask(0xFF);
+		glEnable(GL_DEPTH_TEST);
+
 		// check and call events and swap the buffers
 		glfwPollEvents();
 		glfwSwapBuffers(window);

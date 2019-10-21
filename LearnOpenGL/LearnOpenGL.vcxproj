@@ -131,15 +131,22 @@
     <ClCompile Include="..\..\..\..\..\..\..\MaLibs\OpenGL\GLAD\src\glad.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Shader.h" />
+    <ClCompile Include="Utility\CheckCin.cpp" />
+    <ClCompile Include="Utility\PRNG.cpp" />
+    <ClCompile Include="Utility\Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="stb_image.h" />
+    <ClInclude Include="Utility\Headers\CheckCin.h" />
+    <ClInclude Include="Utility\Headers\PRNG.h" />
+    <ClInclude Include="Utility\Headers\Timer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\color.frag" />
+    <None Include="shaders\depth.frag" />
     <None Include="shaders\gouraud.frag" />
     <None Include="shaders\gouraud.vert" />
     <None Include="shaders\lighting.frag" />

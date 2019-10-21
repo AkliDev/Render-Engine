@@ -66,6 +66,9 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, mat
 
 void main()
 {    
+	vec4 texColor = texture(material.diffuse, TexCoords);
+    if(texColor.a < 0.1)
+        discard;
     vec3 norm = normalize(Normal);
     vec3 viewDir = normalize(-FragPos);
 	// define an output color value

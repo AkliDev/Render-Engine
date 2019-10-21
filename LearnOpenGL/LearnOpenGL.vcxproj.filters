@@ -16,6 +16,12 @@
     <Filter Include="Resource Files\Shaders">
       <UniqueIdentifier>{ec416cce-bb11-4438-8b7b-926ee8d00cf7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Utitly">
+      <UniqueIdentifier>{a41c23ed-bcb9-4762-a997-16e30c8be817}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utitly\Headers">
+      <UniqueIdentifier>{d1af3b88-cbb5-4916-987e-6e549148a890}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\..\..\..\..\MaLibs\OpenGL\GLAD\src\glad.c">
@@ -26,6 +32,15 @@
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility\PRNG.cpp">
+      <Filter>Utitly</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility\Timer.cpp">
+      <Filter>Utitly</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility\CheckCin.cpp">
+      <Filter>Utitly</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -40,6 +55,15 @@
     </ClInclude>
     <ClInclude Include="Model.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility\Headers\PRNG.h">
+      <Filter>Utitly\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility\Headers\Timer.h">
+      <Filter>Utitly\Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility\Headers\CheckCin.h">
+      <Filter>Utitly\Headers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -71,6 +95,9 @@
       <Filter>Resource Files\Shaders</Filter>
     </None>
     <None Include="shaders\lighting.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\depth.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
   </ItemGroup>

@@ -34,6 +34,7 @@ public:
 	}
 	void Draw(Shader shader)
 	{
+		shader.use();
 		for (unsigned int i = 0; i < meshes.size(); i++)
 			meshes[i].Draw(shader);
 	}
@@ -55,6 +56,7 @@ private:
 
 		processNode(scene->mRootNode, scene);
 	}
+
 	void processNode(aiNode *node, const aiScene *scene)
 	{
 		// process all the node's meshes (if any)
@@ -69,6 +71,7 @@ private:
 			processNode(node->mChildren[i], scene);
 		}
 	}
+
 	Mesh processMesh(aiMesh *mesh, const aiScene *scene)
 	{
 		std::vector<Vertex> vertices;
@@ -131,11 +134,26 @@ private:
 		{
 			aiString str;
 			mat->GetTexture(type, i, &str);
-			Texture texture;
-			texture.id = TextureFromFile(str.C_Str(), directory);
-			texture.type = typeName;
-			texture.path = str.C_Str();
-			textures.push_back(texture);
+			// check if texture was loaded before and if so, continue to next iteration: skip loading a new texture
+			bool skip = false;
+			for (unsigned int j = 0; j < textures_loaded.size(); j++)
+			{
+				if (std::strcmp(textures_loaded[j].path.data(), str.C_Str()) == 0)
+				{
+					textures.push_back(textures_loaded[j]);
+					skip = true; // a texture with the same filepath has already been loaded, continue to next one. (optimization)
+					break;
+				}
+			}
+			if (!skip)
+			{   // if texture hasn't been loaded already, load it
+				Texture texture;
+				texture.id = TextureFromFile(str.C_Str(), directory);
+				texture.type = typeName;
+				texture.path = str.C_Str();
+				textures.push_back(texture);
+				textures_loaded.push_back(texture);  // store it as texture loaded for entire model, to ensure we won't unnecesery load duplicate textures.
+			}
 		}
 		return textures;
 	}
