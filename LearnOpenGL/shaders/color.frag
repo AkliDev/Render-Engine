@@ -16,8 +16,9 @@ struct Material
 uniform Material material;
 
 void main()
-{
-
-
+{	
+	vec4 texColor = texture(material.diffuse, TexCoords);
+    if(texColor.a < 0.1)
+        discard;
     FragColor = vec4(color,1.0); // set all 4 vector values to 1.0
 }

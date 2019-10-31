@@ -100,5 +100,11 @@
     <None Include="shaders\depth.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
+    <None Include="shaders\texture.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\texture.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

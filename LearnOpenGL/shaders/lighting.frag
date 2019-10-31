@@ -66,10 +66,14 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir, mat
 
 void main()
 {    
+	//discard transparant fragments
 	vec4 texColor = texture(material.diffuse, TexCoords);
     if(texColor.a < 0.1)
         discard;
+
     vec3 norm = normalize(Normal);
+
+	//We calculate the view direction in viewspace so our view direction is always the offset of the fragment
     vec3 viewDir = normalize(-FragPos);
 	// define an output color value
 	vec3 result = vec3(0.0);
@@ -79,7 +83,7 @@ void main()
 	for(int i = 0; i < NR_POINT_LIGHTS; i++)
   		result += CalcPointLight(pointLights[i], norm,FragPos,viewDir, View);
 		// phase 3: spot light
-    //result += CalcSpotLight(spotLight, norm, FragPos, viewDir, View); 
+    result += CalcSpotLight(spotLight, norm, FragPos, viewDir, View); 
 
 	FragColor = vec4(result, 1.0);
 }
