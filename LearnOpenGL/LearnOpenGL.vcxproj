@@ -153,8 +153,13 @@
     <None Include="shaders\material.frag" />
     <None Include="shaders\materialmap.frag" />
     <None Include="shaders\phong.frag" />
+    <None Include="shaders\reflection.frag" />
+    <None Include="shaders\reflection.vert" />
+    <None Include="shaders\refraction.frag" />
     <None Include="shaders\shader.frag" />
     <None Include="shaders\shader.vert" />
+    <None Include="shaders\skybox.frag" />
+    <None Include="shaders\skybox.vert" />
     <None Include="shaders\texture.frag" />
     <None Include="shaders\texture.vert" />
     <None Include="shaders\vertex.vert" />
