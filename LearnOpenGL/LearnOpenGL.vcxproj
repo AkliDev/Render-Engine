@@ -147,9 +147,12 @@
   <ItemGroup>
     <None Include="shaders\color.frag" />
     <None Include="shaders\depth.frag" />
+    <None Include="shaders\geometry.geom" />
     <None Include="shaders\gouraud.frag" />
     <None Include="shaders\gouraud.vert" />
+    <None Include="shaders\instencevertex.vert" />
     <None Include="shaders\lighting.frag" />
+    <None Include="shaders\lightingcommon.glsl" />
     <None Include="shaders\material.frag" />
     <None Include="shaders\materialmap.frag" />
     <None Include="shaders\phong.frag" />
@@ -158,6 +161,11 @@
     <None Include="shaders\refraction.frag" />
     <None Include="shaders\shader.frag" />
     <None Include="shaders\shader.vert" />
+    <None Include="shaders\shadowcubemap.frag" />
+    <None Include="shaders\shadowcubemap.geom" />
+    <None Include="shaders\shadowcubemap.vert" />
+    <None Include="shaders\shadowlight.frag" />
+    <None Include="shaders\shadowlight.vert" />
     <None Include="shaders\skybox.frag" />
     <None Include="shaders\skybox.vert" />
     <None Include="shaders\texture.frag" />

@@ -121,5 +121,29 @@
     <None Include="shaders\refraction.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
+    <None Include="shaders\geometry.geom">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\instencevertex.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\shadowlight.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\shadowlight.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\shadowcubemap.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\shadowcubemap.geom">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\shadowcubemap.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\lightingcommon.glsl">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>
