@@ -15,6 +15,7 @@ struct DirLight
 struct PointLight 
 {    
     vec3 position;
+	vec3 color;
     
     float constant;
     float linear;
@@ -268,7 +269,7 @@ vec3 CalcPointLight(PointLight light, vec3 tangentLightPos, vec3 normal, vec3 fr
     specular *= attenuation;
 
 	float shadow = shadow ? OmniDirectionalShadowCalculation(fs_in.FragPosWorld, light) : 0.0f;          
-    return (ambient + (1.0 - shadow) * (diffuse + specular));
+    return (ambient + (1.0 - shadow) * (diffuse + specular)) * light.color;
 }
 
 // calculates the color when using a spot light.
@@ -351,10 +352,9 @@ void main()
 
 	float brightness = dot(FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
 
-    if(brightness > 1.0)
+    if(brightness >= 1.0)
         BrightColor = vec4(FragColor.rgb, 1.0);
     else
         BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-	BrightColor = vec4(1.0, 0.0, 1.0, 1.0);
 }

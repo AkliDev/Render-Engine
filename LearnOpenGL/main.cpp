@@ -15,6 +15,11 @@
 
 #include "Utility/Headers/PRNG.h";
 
+#include "Imgui/imgui.h"
+#include "Imgui/imgui_impl_opengl3.h"
+#include "Imgui/imgui_impl_glfw.h"
+#include <stdio.h>
+
 //callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -32,6 +37,7 @@ const unsigned int SCR_HEIGHT = 1000;
 float heightScale = 0.3f;
 float exposure = 1.0f;
 
+bool guiMode;
 bool firstMouse = true;
 float lastX = 800.0f / 2.0;
 float lastY = 600.0 / 2.0;
@@ -45,20 +51,20 @@ int main()
 {
 	SetSeed();
 	glfwInit();
+	// GL 3.0 + GLSL 130
+	const char* glsl_version = "#version 130";
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearOpenGL", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
 	if (window == NULL)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
 		glfwTerminate();
 		return -1;
 	}
-
 	glfwMakeContextCurrent(window);
-
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -71,6 +77,21 @@ int main()
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	stbi_set_flip_vertically_on_load(false);
+
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsClassic();
+
+	// Setup Platform/Renderer bindings
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	myCamera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 	glfwSetCursorPosCallback(window, mouse_callback);
@@ -153,10 +174,11 @@ int main()
 	Shader shadowMapShader("shaders/shadowlight.vert", "shaders/shadowlight.frag");
 	Shader shadowCubeMapShader("shaders/shadowcubemap.vert", "shaders/shadowcubemap.geom", "shaders/shadowcubemap.frag");
 	Shader debugDepthShader("shaders/texture.vert", "shaders/depth.frag");
-	Shader RenderShader("shaders/texture.vert", "shaders/texture.frag");
 	Shader lightingShader("shaders/vertex.vert", "shaders/lighting.frag");
 	Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag");
 	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
+	Shader renderShader("shaders/texture.vert", "shaders/texture.frag");
+	Shader blurShader("shaders/texture.vert", "shaders/blur.frag");
 
 	unsigned int uniformBlockIndex = glGetUniformBlockIndex(lightingShader.ID, "Matrices");
 	glUniformBlockBinding(lightingShader.ID, uniformBlockIndex, 0);
@@ -180,7 +202,7 @@ int main()
 	glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
 	// configure MSAA framebuffer
-    // --------------------------
+	// --------------------------
 	unsigned int framebuffer;
 	glGenFramebuffers(1, &framebuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -196,7 +218,7 @@ int main()
 	}
 	unsigned int attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 	glDrawBuffers(2, attachments);
-	
+
 	// create a (also multisampled) renderbuffer object for depth and stencil attachments
 	unsigned int rbo;
 	glGenRenderbuffers(1, &rbo);
@@ -234,6 +256,25 @@ int main()
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT); // use a single renderbuffer object for both a depth AND stencil buffer.
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbov);
 
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::FRAMEBUFFER:: Intermediate framebuffer is not complete!" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	unsigned int pingpongFBO[2];
+	unsigned int pingPongBuffer[2];
+	glGenFramebuffers(2, pingpongFBO);
+	glGenTextures(2, pingPongBuffer);
+	for (unsigned int i = 0; i < 2; i++)
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+		glBindTexture(GL_TEXTURE_2D, pingPongBuffer[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingPongBuffer[i], 0);
+	}
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		std::cout << "ERROR::FRAMEBUFFER:: Intermediate framebuffer is not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -300,8 +341,6 @@ int main()
 	glfwWindowHint(GLFW_SAMPLES, 4);
 	glEnable(GL_MULTISAMPLE);
 
-	bool moveLight = false;
-
 	// shader configuration
 	// --------------------
 	debugDepthShader.use();
@@ -309,27 +348,27 @@ int main()
 
 	// lighting info
 	// -------------
-	glm::vec3 lightPos(0, 0, -1);
+	glm::vec3 lightPos(0, 1, -2);
+	glm::vec3 lightColor(1);
+	float lightAmbient = 0.0f;
+	float lightDiffuse = 0.4f;
+	float lightSpecular = 2.5f;
 
 	// render loop
 	while (!glfwWindowShouldClose(window))
 	{
+		glfwPollEvents();
+		// feed inputs to dear imgui, start new frame
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
 		float currentTime = glfwGetTime();
 		deltaTime = currentTime - lastFrame;
 		lastFrame = currentTime;
 
 		// input
 		processInput(window);
-		if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS)
-			moveLight ^= true;
-
-		if (moveLight)
-		{
-			// move light position over time
-			lightPos.y = sin(currentTime) * 1.5 + 1.5;
-			// move light position over time
-			lightPos.x = cos(currentTime) * 1.5;
-		}
 
 		// render
 		// ------
@@ -409,7 +448,6 @@ int main()
 		glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
 		lightingShader.use();
-		lightingShader.setBool("blinn", moveLight);
 		lightingShader.setVec3("objectColor", glm::vec3(1.0f));
 		lightingShader.setVec3("lightColor", glm::vec3(1.0f));
 		lightingShader.setVec3("viewPos", myCamera.Position);
@@ -427,9 +465,10 @@ int main()
 
 		// point light 1
 		lightingShader.setVec3("pointLights[0].position", lightPos);
-		lightingShader.setVec3("pointLights[0].ambient", glm::vec3(0.01f));
-		lightingShader.setVec3("pointLights[0].diffuse", glm::vec3(0.08f));
-		lightingShader.setVec3("pointLights[0].specular", glm::vec3(1.08f));
+		lightingShader.setVec3("pointLights[0].color", lightColor);
+		lightingShader.setVec3("pointLights[0].ambient", lightAmbient * lightColor);
+		lightingShader.setVec3("pointLights[0].diffuse", lightDiffuse  * lightColor);
+		lightingShader.setVec3("pointLights[0].specular", lightSpecular  * lightColor);
 		lightingShader.setFloat("pointLights[0].constant", 1.0f);
 		lightingShader.setFloat("pointLights[0].linear", 0.09);
 		lightingShader.setFloat("pointLights[0].quadratic", 0.032);
@@ -495,6 +534,7 @@ int main()
 		model = glm::translate(model, lightPos);
 		model = glm::scale(model, glm::vec3(0.3f));
 		colorShader.setMat4("model", model);
+		colorShader.setVec3("color", lightColor);
 		//glActiveTexture(GL_TEXTURE0);
 		//glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
 		//lightingShader.setInt("material.diffuse", 0);
@@ -526,7 +566,21 @@ int main()
 			glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
 			glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 		}
-		
+
+		bool horizontal = true, first_iteration = true;
+		int amount = 10;
+		blurShader.use();
+		for (unsigned int i = 0; i < amount; i++)
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
+			blurShader.setInt("horizontal", horizontal);
+			glBindTexture(GL_TEXTURE_2D, first_iteration ? colorBuffers[1] : pingPongBuffer[!horizontal]);
+			renderQuad();
+			horizontal = !horizontal;
+			if (first_iteration)
+				first_iteration = false;
+		}
+
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glDisable(GL_DEPTH_TEST); // disable depth test so screen-space quad isn't discarded due to depth test.
 
@@ -536,11 +590,14 @@ int main()
 
 		// render render map to quad for visual 
 		// ---------------------------------------------
-		RenderShader.use();
+		renderShader.use();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, colorBuffers[1]);
-		RenderShader.setInt("screenTexture", 0);
-		RenderShader.setFloat("exposure", exposure);
+		glBindTexture(GL_TEXTURE_2D, pingPongBuffer[0]);
+		renderShader.setInt("scene", 0);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
+		renderShader.setInt("bloomBlur", 1);
+		renderShader.setFloat("exposure", exposure);
 
 		////// render Depth map to quad for visual debugging
 		////// ---------------------------------------------
@@ -552,10 +609,33 @@ int main()
 
 		renderQuad();
 
-		// check and call events and swap the buffers
-		glfwPollEvents();
+		{
+			ImGui::Begin("Stats");
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+			ImGui::End();
+		}
+
+		{
+			ImGui::Begin("Light Editor");                          	
+			ImGui::DragFloat3("light position", (float*)&lightPos.x, 0.10f); 
+			ImGui::ColorEdit3("light color", (float*)&lightColor.x, 0.10f);
+			ImGui::DragFloat("light ambient", (float*)&lightAmbient, 0.10f);
+			ImGui::DragFloat("light diffuse", (float*)&lightDiffuse, 0.10f);
+			ImGui::DragFloat("light specular", (float*)&lightSpecular, 0.10f);
+			ImGui::End();
+		}
+
+		// Rendering
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+		// swap the buffer
 		glfwSwapBuffers(window);
 	}
+
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 
 	glDeleteVertexArrays(1, &skyboxVAO);
 	glDeleteBuffers(1, &skyboxVBO);
@@ -688,31 +768,43 @@ void processInput(GLFWwindow* window)
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-		myCamera.ProcessKeyboard(Camera_Movement::FORWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-		myCamera.ProcessKeyboard(Camera_Movement::BACKWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-		myCamera.ProcessKeyboard(Camera_Movement::LEFT, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-		myCamera.ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-		myCamera.ProcessKeyboard(Camera_Movement::UP, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-		myCamera.ProcessKeyboard(Camera_Movement::DOWN, deltaTime);
-
-	if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS)
+	if (glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
 	{
-		if (heightScale > 0.0f)
-			heightScale -= 0.005f;
+		guiMode ^= true;
+		if (guiMode)
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 		else
-			heightScale = 0.0f;
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	}
-	else if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS)
+
+	if (!guiMode)
 	{
+		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+			myCamera.ProcessKeyboard(Camera_Movement::FORWARD, deltaTime);
+		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+			myCamera.ProcessKeyboard(Camera_Movement::BACKWARD, deltaTime);
+		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+			myCamera.ProcessKeyboard(Camera_Movement::LEFT, deltaTime);
+		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+			myCamera.ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
+		if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+			myCamera.ProcessKeyboard(Camera_Movement::UP, deltaTime);
+		if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+			myCamera.ProcessKeyboard(Camera_Movement::DOWN, deltaTime);
 
-		heightScale += 0.005f;
+		if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS)
+		{
+			if (heightScale > 0.0f)
+				heightScale -= 0.005f;
+			else
+				heightScale = 0.0f;
+		}
+		else if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS)
+		{
 
+			heightScale += 0.005f;
+
+		}
 	}
 }
 
@@ -732,7 +824,8 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 	lastX = xpos;
 	lastY = ypos;
 
-	myCamera.ProcessMouseMovement(xoffset, yoffset);
+	if (!guiMode)
+		myCamera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
