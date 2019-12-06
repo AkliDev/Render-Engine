@@ -220,11 +220,11 @@ private:
 				glGetShaderInfoLog(shader, 1024, NULL, infoLog);
 				std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
 			}
-			else
+			/*else
 			{
 				glGetShaderInfoLog(shader, 1024, NULL, infoLog);
 				std::cout << "SUCCSES::SHADER_COMPILATION_SUCCES of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
-			}
+			}*/
 		}
 		else
 		{
@@ -234,11 +234,11 @@ private:
 				glGetProgramInfoLog(shader, 1024, NULL, infoLog);
 				std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
 			}
-			else
+			/*else
 			{
 				glGetProgramInfoLog(shader, 1024, NULL, infoLog);
 				std::cout << "SUCCES::PROGRAM_LINKING_SUCCES of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
-			}
+			}*/
 		}
 	}
 };

@@ -139,9 +139,6 @@
     <None Include="shaders\materialmap.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
-    <None Include="shaders\lighting.frag">
-      <Filter>Resource Files\Shaders</Filter>
-    </None>
     <None Include="shaders\depth.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
@@ -191,6 +188,24 @@
       <Filter>Resource Files\Shaders</Filter>
     </None>
     <None Include="shaders\blur.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\gbuffershader.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\gtexture.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\ssaogbuffershader.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\ssaoshader.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\gviewspacelighting.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\gworldspacelighting.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
   </ItemGroup>

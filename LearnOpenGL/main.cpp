@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <random>
 #include <iostream>
 #include "Shader.h"
 #include "Camera.h"
@@ -31,6 +32,9 @@ void renderScene(const Shader &shader);
 void renderCube();
 void renderQuad();
 
+void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity,
+	GLsizei length, const GLchar *message, void *userParam);
+
 // settings
 const unsigned int SCR_WIDTH = 1000;
 const unsigned int SCR_HEIGHT = 1000;
@@ -45,15 +49,21 @@ float lastY = 600.0 / 2.0;
 float deltaTime = 0.0f;	// Time between current frame and last frame
 float lastFrame = 0.0f; // Time of last frame
 
+float lerp(float a, float b, float f)
+{
+	return a + f * (b - a);
+}
+
 Camera myCamera;
 
 int main()
 {
 	SetSeed();
 	glfwInit();
+	
 	// GL 3.0 + GLSL 130
 	const char* glsl_version = "#version 130";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
@@ -96,6 +106,16 @@ int main()
 	myCamera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
+
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+	GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+	{
+		glEnable(GL_DEBUG_OUTPUT);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+		glDebugMessageCallback(nullptr, glDebugOutput);
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+	}
 
 	float skyboxVertices[] = {
 		// positions          
@@ -171,17 +191,13 @@ int main()
 	unsigned int norm = loadTexture("textures/toy_box_normal.png", false);
 	unsigned int depth = loadTexture("textures/toy_box_disp.png", false);
 
-	Shader shadowMapShader("shaders/shadowlight.vert", "shaders/shadowlight.frag");
-	Shader shadowCubeMapShader("shaders/shadowcubemap.vert", "shaders/shadowcubemap.geom", "shaders/shadowcubemap.frag");
-	Shader debugDepthShader("shaders/texture.vert", "shaders/depth.frag");
-	Shader lightingShader("shaders/vertex.vert", "shaders/lighting.frag");
 	Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag");
 	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
-	Shader renderShader("shaders/texture.vert", "shaders/texture.frag");
-	Shader blurShader("shaders/texture.vert", "shaders/blur.frag");
+	Shader renderShader("shaders/texture.vert", "shaders/gworldspacelighting.frag");
+	Shader gBufferShader("shaders/vertex.vert", "shaders/gbuffershader.frag");
 
-	unsigned int uniformBlockIndex = glGetUniformBlockIndex(lightingShader.ID, "Matrices");
-	glUniformBlockBinding(lightingShader.ID, uniformBlockIndex, 0);
+	unsigned int uniformBlockIndex = glGetUniformBlockIndex(gBufferShader.ID, "Matrices");
+	glUniformBlockBinding(gBufferShader.ID, uniformBlockIndex, 0);
 	glUniformBlockBinding(colorShader.ID, uniformBlockIndex, 0);
 
 	unsigned int uboMatrices;
@@ -201,131 +217,93 @@ int main()
 	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection));
 	glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-	// configure MSAA framebuffer
-	// --------------------------
-	unsigned int framebuffer;
-	glGenFramebuffers(1, &framebuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-	// create a multisampled color attachment texture
-	unsigned int textureColorBuffersMultiSampled[2];
-	glGenTextures(2, textureColorBuffersMultiSampled);
-	for (size_t i = 0; i < 2; i++)
-	{
-		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorBuffersMultiSampled[i]);
-		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 4, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
-		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D_MULTISAMPLE, textureColorBuffersMultiSampled[i], 0);
-	}
-	unsigned int attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-	glDrawBuffers(2, attachments);
-
-	// create a (also multisampled) renderbuffer object for depth and stencil attachments
-	unsigned int rbo;
-	glGenRenderbuffers(1, &rbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT);
-	glBindRenderbuffer(GL_RENDERBUFFER, 0);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	// configure second post-processing framebuffer
-	unsigned int intermediateFBO;
-	glGenFramebuffers(1, &intermediateFBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, intermediateFBO);
-	unsigned int colorBuffers[2];
-	glGenTextures(2, colorBuffers);
-	for (size_t i = 0; i < 2; i++)
-	{
-		glBindTexture(GL_TEXTURE_2D, colorBuffers[i]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		// attach texture to framebuffer
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, colorBuffers[i], 0);
-	}
-	glDrawBuffers(2, attachments);
-
-	unsigned int rbov;
-	glGenRenderbuffers(1, &rbov);
-	glBindRenderbuffer(GL_RENDERBUFFER, rbov);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SCR_WIDTH, SCR_HEIGHT); // use a single renderbuffer object for both a depth AND stencil buffer.
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbov);
-
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "ERROR::FRAMEBUFFER:: Intermediate framebuffer is not complete!" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	unsigned int pingpongFBO[2];
-	unsigned int pingPongBuffer[2];
-	glGenFramebuffers(2, pingpongFBO);
-	glGenTextures(2, pingPongBuffer);
-	for (unsigned int i = 0; i < 2; i++)
-	{
-		glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
-		glBindTexture(GL_TEXTURE_2D, pingPongBuffer[i]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingPongBuffer[i], 0);
-	}
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "ERROR::FRAMEBUFFER:: Intermediate framebuffer is not complete!" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
-	unsigned int depthMapFBO;
-	glGenFramebuffers(1, &depthMapFBO);
-
-	/*unsigned int shadowDepthMap;
-	glGenTextures(1, &shadowDepthMap);
-	glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
-		SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	// configure g-buffer framebuffer
+  // ------------------------------
+	unsigned int gBuffer;
+	glGenFramebuffers(1, &gBuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+	unsigned int gPosition, gNormal, gAlbedoSpec;
+	// position color buffer
+	glGenTextures(1, &gPosition);
+	glBindTexture(GL_TEXTURE_2D, gPosition);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-	float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthMap, 0);
-	glDrawBuffer(GL_NONE);
-	glReadBuffer(GL_NONE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
+	// normal color buffer
+	glGenTextures(1, &gNormal);
+	glBindTexture(GL_TEXTURE_2D, gNormal);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
+	// color + specular color buffer
+	glGenTextures(1, &gAlbedoSpec);
+	glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedoSpec, 0);
+	// tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
+	unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
+	glDrawBuffers(3, attachments);
+	// create and attach depth buffer (renderbuffer)
+	unsigned int rboDepth;
+	glGenRenderbuffers(1, &rboDepth);
+	glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+	// finally check if framebuffer is complete
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "Framebuffer not complete!" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	unsigned int ssaoFBO;
+	glGenFramebuffers(1, &ssaoFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+
+	unsigned int ssaoColorBuffer;
+	glGenTextures(1, &ssaoColorBuffer);
+	glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBuffer, 0);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "ERROR::FRAMEBUFFER:: Intermediate framebuffer is not complete!" << std::endl;
-
+		std::cout << "Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	*/
 
-	// create depth cubemap texture
-	unsigned int shadowDepthCubemap;
-	glGenTextures(1, &shadowDepthCubemap);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, shadowDepthCubemap);
-	for (unsigned int i = 0; i < 6; ++i)
-		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	// attach depth texture as FBO's depth buffer
-	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadowDepthCubemap, 0);
-	glDrawBuffer(GL_NONE);
-	glReadBuffer(GL_NONE);
+	std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between 0.0 - 1.0
+	std::default_random_engine generator;
+	std::vector<glm::vec3> ssaoKernel;
+	for (unsigned int i = 0; i < 64; ++i)
+	{
+		glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
+		sample = glm::normalize(sample);
+		sample *= randomFloats(generator);
+		float scale = (float)i / 64.0;
+		scale = lerp(0.1f, 1.0f, scale * scale);
+		sample *= scale;
+		ssaoKernel.push_back(sample);
+		ssaoKernel.push_back(sample);
+	}
 
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "ERROR::FRAMEBUFFER:: ShadowMap framebuffer is not complete!" << std::endl;
+	std::vector<glm::vec3> ssaoNoise;
+	for (unsigned int i = 0; i < 16; i++)
+	{
+		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f);
+		ssaoNoise.push_back(noise);
+	}
 
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	unsigned int noiseTexture;
+	glGenTextures(1, &noiseTexture);
+	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, &ssaoNoise[0]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	glEnable(GL_DEPTH_TEST);
@@ -336,23 +314,19 @@ int main()
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	//glCullFace(GL_BACK);
 	//glFrontFace(GL_CCW);
-	glEnable(GL_PROGRAM_POINT_SIZE);
+	//glEnable(GL_PROGRAM_POINT_SIZE);
 
-	glfwWindowHint(GLFW_SAMPLES, 4);
-	glEnable(GL_MULTISAMPLE);
+	//glfwWindowHint(GLFW_SAMPLES, 4);
+	//glEnable(GL_MULTISAMPLE);
 
-	// shader configuration
-	// --------------------
-	debugDepthShader.use();
-	debugDepthShader.setInt("depthMap", 0);
 
 	// lighting info
 	// -------------
-	glm::vec3 lightPos(0, 1, -2);
+	glm::vec3 lightPos(0, 1, 2);
 	glm::vec3 lightColor(1);
-	float lightAmbient = 0.0f;
-	float lightDiffuse = 0.4f;
-	float lightSpecular = 2.5f;
+
+	glm::vec3 modelPosition(0, 0, 0);
+	glm::vec3 modelRotation(0, 0, 0);
 
 	// render loop
 	while (!glfwWindowShouldClose(window))
@@ -372,74 +346,14 @@ int main()
 
 		// render
 		// ------
-
-		// make sure we clear the framebuffer's content
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 		float near_plane = 1.0f, far_plane = 25.0f;
-		float aspect = (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT;
-		float near = 1.0f;
-		float far = 25.0f;
-		glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), aspect, near, far);
-		std::vector<glm::mat4> shadowTransforms;
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
-		shadowTransforms.push_back(shadowProj * glm::lookAt(lightPos, lightPos + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
 
-		// 1. render scene to depth cubemap
-	   // --------------------------------
-		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		shadowCubeMapShader.use();
-		for (unsigned int i = 0; i < 6; ++i)
-			shadowCubeMapShader.setMat4("shadowMatrices[" + std::to_string(i) + "]", shadowTransforms[i]);
-		shadowCubeMapShader.setFloat("far_plane", far_plane);
-		shadowCubeMapShader.setVec3("lightPos", lightPos);
-
-		// 1. render depth of scene to texture (from light's perspective)
-		// --------------------------------------------------------------
-		//glm::mat4 lightProjection, lightView;
-		//glm::mat4 lightSpaceMatrix;
-		//lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
-		//lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
-		//lightSpaceMatrix = lightProjection * lightView;
-		//// render scene from light's point of view
-		//shadowMapShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-
-
-		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-		glEnable(GL_DEPTH_TEST);
-		glClear(GL_DEPTH_BUFFER_BIT);
-		glCullFace(GL_BACK);
-
-		shadowCubeMapShader.use();
-
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0, 5, 15.0));
-		model = glm::rotate(model, glm::radians(180.0f), glm::vec3(0, 1, 0));
-		model = glm::scale(model, glm::vec3(10.0f));
-		shadowCubeMapShader.setMat4("model", model);
-		//renderCube();
-
-		model = glm::mat4(1.0f);
-		//model = glm::rotate(model, glm::radians(currentTime) * 5, glm::vec3(1, 1, 1));
-		model = glm::scale(model, glm::vec3(0.05f));
-		shadowCubeMapShader.setMat4("model", model);
-		Zero.Draw(shadowCubeMapShader);
-
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-		glEnable(GL_DEPTH_TEST); // enable depth testing (is disabled for rendering screen-space quad)
+		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
 		glCullFace(GL_BACK);
 
 		// reset viewport
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+		glClearColor(0,0,0,0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		view = glm::lookAt(myCamera.Position, myCamera.Position + myCamera.Front, myCamera.Up);
@@ -447,167 +361,99 @@ int main()
 		glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
 		glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-		lightingShader.use();
-		lightingShader.setVec3("objectColor", glm::vec3(1.0f));
-		lightingShader.setVec3("lightColor", glm::vec3(1.0f));
-		lightingShader.setVec3("viewPos", myCamera.Position);
-
-		// directional light
-		lightingShader.setVec3("material.ambient", 1.0f, 0.5f, 0.31f);
-		lightingShader.setVec3("material.diffuse", 1.0f, 0.5f, 0.31f);
-		lightingShader.setVec3("material.specular", 0.5f, 0.5f, 0.5f);
-		lightingShader.setFloat("material.shininess", 32.0f);
-
-		lightingShader.setVec3("dirLight.direction", -lightPos);
-		lightingShader.setVec3("dirLight.ambient", glm::vec3(0.2f));
-		lightingShader.setVec3("dirLight.diffuse", glm::vec3(0.5f));
-		lightingShader.setVec3("dirLight.specular", glm::vec3(0.7f));
-
-		// point light 1
-		lightingShader.setVec3("pointLights[0].position", lightPos);
-		lightingShader.setVec3("pointLights[0].color", lightColor);
-		lightingShader.setVec3("pointLights[0].ambient", lightAmbient * lightColor);
-		lightingShader.setVec3("pointLights[0].diffuse", lightDiffuse  * lightColor);
-		lightingShader.setVec3("pointLights[0].specular", lightSpecular  * lightColor);
-		lightingShader.setFloat("pointLights[0].constant", 1.0f);
-		lightingShader.setFloat("pointLights[0].linear", 0.09);
-		lightingShader.setFloat("pointLights[0].quadratic", 0.032);
-
-		//// spotLight
-		lightingShader.setVec3("spotLight.position", myCamera.Position);
-		lightingShader.setVec3("spotLight.direction", glm::vec3(0.0f, 0.0f, -1.0f));
-		lightingShader.setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-		lightingShader.setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-		lightingShader.setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-		lightingShader.setFloat("spotLight.constant", 1.0f);
-		lightingShader.setFloat("spotLight.linear", 0.09);
-		lightingShader.setFloat("spotLight.quadratic", 0.032);
-		lightingShader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-		lightingShader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
-		lightingShader.setFloat("far_plane", far_plane);
-
-		//model = glm::mat4(1.0f);	
-		//model = glm::translate(model, glm::vec3(0, 1, 2.0));
-		//model = glm::rotate(model, glm::radians(180.0f), glm::vec3(0, 1, 0));	
-		////model = glm::scale(model, glm::vec3(10.0f));
-		//lightingShader.setMat4("model", model);
-		//glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, diff);
-		lightingShader.setInt("material.texture_diffuse", 0);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, diff);
-		lightingShader.setInt("material.texture_specular", 1);
-		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, norm);
-		lightingShader.setInt("material.texture_normal", 3);
-		glActiveTexture(GL_TEXTURE4);
-		glBindTexture(GL_TEXTURE_2D, depth);
-		lightingShader.setInt("material.texture_depth", 4);
-		lightingShader.setFloat("material.heightscale", heightScale); // adjust with Q and E keys
-
-		//lightingShader.setVec3("cameraPos", myCamera.Position);
-		////lightingShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-		////glActiveTexture(GL_TEXTURE4);
-		////glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
-		////lightingShader.setInt("shadowMap", 4);
-		//glActiveTexture(GL_TEXTURE5);
-		//glBindTexture(GL_TEXTURE_CUBE_MAP, shadowDepthCubemap);
-		//lightingShader.setInt("shadowCubeMap", 5);
-		//renderCube();
-
-		model = glm::mat4(1.0f);
-		//model = glm::rotate(model, glm::radians(currentTime) * 5, glm::vec3(1, 1, 1));
-		model = glm::scale(model, glm::vec3(0.05f));
-		lightingShader.setMat4("model", model);
-		lightingShader.setVec3("cameraPos", myCamera.Position);
-		//lightingShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-		//glActiveTexture(GL_TEXTURE4);
-		//glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
-		//lightingShader.setInt("shadowMap", 4);
-		glActiveTexture(GL_TEXTURE5);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, shadowDepthCubemap);
-		lightingShader.setInt("shadowCubeMap", 5);
-		Zero.Draw(lightingShader);
-
-		colorShader.use();
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, lightPos);
-		model = glm::scale(model, glm::vec3(0.3f));
-		colorShader.setMat4("model", model);
-		colorShader.setVec3("color", lightColor);
-		//glActiveTexture(GL_TEXTURE0);
-		//glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
-		//lightingShader.setInt("material.diffuse", 0);
-		//glActiveTexture(GL_TEXTURE1);	
-		//glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
-		//lightingShader.setInt("material.specular", 1);
-		renderCube();
-
-		// draw skybox as last
-		glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
-
-		skyboxShader.use();
-		view = glm::mat4(glm::mat3(myCamera.GetViewMatrix()));
-		skyboxShader.setMat4("projection", projection);
-		skyboxShader.setMat4("view", view);
-
-		glBindVertexArray(skyboxVAO);
+		gBufferShader.use();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-		glDepthFunc(GL_LESS); // set depth function back to default
+		glBindTexture(GL_TEXTURE_2D, diff);
+		gBufferShader.setInt("material.texture_diffuse", 0);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, spec);
+		gBufferShader.setInt("material.texture_specular", 1);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, norm);
+		gBufferShader.setInt("material.texture_normal", 2);
+		glActiveTexture(GL_TEXTURE3);
+		glBindTexture(GL_TEXTURE_2D, depth);
+		gBufferShader.setInt("material.texture_depth", 3);
+		gBufferShader.setFloat("material.heightscale", heightScale); // adjust with Q and E keys
+		
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, modelPosition);
+		model = glm::scale(model, glm::vec3(0.05f));
+		model = glm::rotate(model, glm::radians(modelRotation.x), glm::vec3(1, 0, 0));
+		model = glm::rotate(model, glm::radians(modelRotation.y), glm::vec3(0, 1, 0));
+		model = glm::rotate(model, glm::radians(modelRotation.z), glm::vec3(0, 0, 1));
 
-		// 2. now blit multisampled buffer(s) to normal colorbuffer of intermediate FBO. Image is stored in screenTexture
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, intermediateFBO);
-		for (size_t i = 0; i < 2; i++)
-		{
-			glReadBuffer(GL_COLOR_ATTACHMENT0 + i);
-			glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
-			glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-		}
+		gBufferShader.setMat4("model", model);
+		gBufferShader.setVec3("cameraPos", myCamera.Position);
+		Zero.Draw(gBufferShader);
 
-		bool horizontal = true, first_iteration = true;
-		int amount = 10;
-		blurShader.use();
-		for (unsigned int i = 0; i < amount; i++)
-		{
-			glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
-			blurShader.setInt("horizontal", horizontal);
-			glBindTexture(GL_TEXTURE_2D, first_iteration ? colorBuffers[1] : pingPongBuffer[!horizontal]);
-			renderQuad();
-			horizontal = !horizontal;
-			if (first_iteration)
-				first_iteration = false;
-		}
+		//// draw skybox as last
+		//glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+
+		//skyboxShader.use();
+		//view = glm::mat4(glm::mat3(myCamera.GetViewMatrix()));
+		//skyboxShader.setMat4("projection", projection);
+		//skyboxShader.setMat4("view", view);
+
+		//glBindVertexArray(skyboxVAO);
+		//glActiveTexture(GL_TEXTURE0);
+		//glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
+		//glDrawArrays(GL_TRIANGLES, 0, 36);
+		//glDepthFunc(GL_LESS); // set depth function back to default
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glDisable(GL_DEPTH_TEST); // disable depth test so screen-space quad isn't discarded due to depth test.
-
+		glDisable(GL_DEPTH_TEST);
 		// reset viewport
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+		glClearColor(0, 0, 0, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// render render map to quad for visual 
 		// ---------------------------------------------
 		renderShader.use();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, pingPongBuffer[0]);
-		renderShader.setInt("scene", 0);
+		glBindTexture(GL_TEXTURE_2D, gPosition);
+		renderShader.setInt("gPosition", 0);
 		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
-		renderShader.setInt("bloomBlur", 1);
-		renderShader.setFloat("exposure", exposure);
+		glBindTexture(GL_TEXTURE_2D, gNormal);
+		renderShader.setInt("gNormal", 1);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+		renderShader.setInt("gAlbedoSpec", 2);
+		renderShader.setVec3("viewPos", myCamera.Position);
+		renderShader.setVec3("lights[0].Position", lightPos);		
+		renderShader.setVec3("lights[0].Color", lightColor);
+		renderShader.setMat4("viewMatrix", view);
 
-		////// render Depth map to quad for visual debugging
-		////// ---------------------------------------------
-		//debugDepthShader.use();
-		//debugDepthShader.setFloat("near_plane", near_plane);
-		//debugDepthShader.setFloat("far_plane", far_plane);
-		////glActiveTexture(GL_TEXTURE0);
-		////glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
+		// update attenuation parameters and calculate radius
+		const float constant = 1.0f; // note that we don't send this to the shader, we assume it is always 1.0 (in our case)
+		const float linear = 0.7f;
+		const float quadratic = 1.8f;
+		renderShader.setFloat("lights[0].Linear", linear);
+		renderShader.setFloat("lights[0].Quadratic", quadratic);
+		// then calculate radius of light volume/sphere
+		const float maxBrightness = std::fmaxf(std::fmaxf(lightColor.r, lightColor.g), lightColor.b);
+		float radius = (-linear + std::sqrt(linear * linear - 4 * quadratic * (constant - (256.0f / 5.0f) * maxBrightness))) / (2.0f * quadratic);
+		renderShader.setFloat("lights[0].Radius", radius);
 
 		renderQuad();
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
+		glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		glEnable(GL_DEPTH_TEST);
+
+		// now render light cubes as before
+		//
+		colorShader.use();
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, lightPos);
+		model = glm::scale(model, glm::vec3(0.3f));
+		colorShader.setMat4("model", model);
+		colorShader.setVec3("color", lightColor);
+		renderCube();
 
 		{
 			ImGui::Begin("Stats");
@@ -616,12 +462,16 @@ int main()
 		}
 
 		{
-			ImGui::Begin("Light Editor");                          	
-			ImGui::DragFloat3("light position", (float*)&lightPos.x, 0.10f); 
+			ImGui::Begin("Light Editor");
+			ImGui::DragFloat3("light position", (float*)&lightPos.x, 0.10f);
 			ImGui::ColorEdit3("light color", (float*)&lightColor.x, 0.10f);
-			ImGui::DragFloat("light ambient", (float*)&lightAmbient, 0.10f);
-			ImGui::DragFloat("light diffuse", (float*)&lightDiffuse, 0.10f);
-			ImGui::DragFloat("light specular", (float*)&lightSpecular, 0.10f);
+			ImGui::End();
+		}
+
+		{
+			ImGui::Begin("Model Editor");
+			ImGui::DragFloat3("model position", (float*)&modelPosition.x, 0.10f);
+			ImGui::DragFloat3("model rotation", (float*)&modelRotation.x, 0.10f);
 			ImGui::End();
 		}
 
@@ -640,8 +490,7 @@ int main()
 	glDeleteVertexArrays(1, &skyboxVAO);
 	glDeleteBuffers(1, &skyboxVBO);
 	glDeleteBuffers(1, &uboMatrices);
-	glDeleteBuffers(1, &intermediateFBO);
-	glDeleteBuffers(1, &framebuffer);
+	glDeleteBuffers(1, &gBuffer);
 	glDeleteBuffers(1, &spec);
 	glfwTerminate();
 
@@ -919,3 +768,51 @@ unsigned int loadCubemap(std::vector<std::string> faces)
 
 	return textureID;
 }
+
+void APIENTRY glDebugOutput(GLenum source,
+	GLenum type,
+	GLuint id,
+	GLenum severity,
+	GLsizei length,
+	const GLchar *message,
+	void *userParam)
+{
+	// ignore non-significant error/warning codes
+	if (id == 131169 || id == 131185 || id == 131218 || id == 131204) return;
+
+	std::cout << "---------------" << std::endl;
+	std::cout << "Debug message (" << id << "): " << message << std::endl;
+
+	switch (source)
+	{
+	case GL_DEBUG_SOURCE_API:             std::cout << "Source: API"; break;
+	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:   std::cout << "Source: Window System"; break;
+	case GL_DEBUG_SOURCE_SHADER_COMPILER: std::cout << "Source: Shader Compiler"; break;
+	case GL_DEBUG_SOURCE_THIRD_PARTY:     std::cout << "Source: Third Party"; break;
+	case GL_DEBUG_SOURCE_APPLICATION:     std::cout << "Source: Application"; break;
+	case GL_DEBUG_SOURCE_OTHER:           std::cout << "Source: Other"; break;
+	} std::cout << std::endl;
+
+	switch (type)
+	{
+	case GL_DEBUG_TYPE_ERROR:               std::cout << "Type: Error"; break;
+	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR: std::cout << "Type: Deprecated Behaviour"; break;
+	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:  std::cout << "Type: Undefined Behaviour"; break;
+	case GL_DEBUG_TYPE_PORTABILITY:         std::cout << "Type: Portability"; break;
+	case GL_DEBUG_TYPE_PERFORMANCE:         std::cout << "Type: Performance"; break;
+	case GL_DEBUG_TYPE_MARKER:              std::cout << "Type: Marker"; break;
+	case GL_DEBUG_TYPE_PUSH_GROUP:          std::cout << "Type: Push Group"; break;
+	case GL_DEBUG_TYPE_POP_GROUP:           std::cout << "Type: Pop Group"; break;
+	case GL_DEBUG_TYPE_OTHER:               std::cout << "Type: Other"; break;
+	} std::cout << std::endl;
+
+	switch (severity)
+	{
+	case GL_DEBUG_SEVERITY_HIGH:         std::cout << "Severity: high"; break;
+	case GL_DEBUG_SEVERITY_MEDIUM:       std::cout << "Severity: medium"; break;
+	case GL_DEBUG_SEVERITY_LOW:          std::cout << "Severity: low"; break;
+	case GL_DEBUG_SEVERITY_NOTIFICATION: std::cout << "Severity: notification"; break;
+	} std::cout << std::endl;
+	std::cout << std::endl;
+}
+

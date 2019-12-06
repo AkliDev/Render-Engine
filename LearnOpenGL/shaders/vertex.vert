@@ -64,7 +64,9 @@ out VS_OUT
 	out vec3 NormalWorld;
 	out vec2 TexCoords;
 	out vec4 FragPosLightSpace;	
+	out mat4 Model;
 	out mat4 View;
+	out mat3 TBN;
 } vs_out;
 
 layout (std140) uniform Matrices
@@ -108,6 +110,7 @@ void main()
 	vec3 B = cross(N,T);
 	B =-B;
     mat3 TBN = mat3(T, B, N);
+	vs_out.TBN = TBN;
 
 	for(int i = 0; i < NR_POINT_LIGHTS; i++)
 		vs_lights_out.TangentLightPos[i] = transpose(TBN) * vs_lights_out.PointLights[i].position;
