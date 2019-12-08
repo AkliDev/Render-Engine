@@ -135,19 +135,29 @@ void main()
 	// offset texture coordinates with Parallax Mapping
 	vec3 viewDir = normalize(fs_in.TangentCameraPos - fs_in.TangentFragPos); // tangent space view direction
 	texCoords = ParallaxMapping(fs_in.TexCoords,  viewDir);       
-    if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
-        discard;
+//    if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
+//        discard;
+	if(texture(material.texture_diffuse, texCoords).a < 0.1)
+		discard;
 
 	// obtain normal from normal map in range [0,1]
     vec3 norm = normalize(texture(material.texture_normal, texCoords).rgb);
     // transform normal vector to range [-1,1]
 	norm = texture(material.texture_normal, texCoords).rgb;
-	norm = normalize(norm * 2.0 - 1.0); 
+	if(norm == vec3(0))
+	{
+		norm = fs_in.NormalView;
+		norm = normalize(norm);
+	}
+	else
+	{
+		norm = normalize(norm * 2.0 - 1.0); 
 
-	//transform normal from tangent to model space
-	norm = normalize(fs_in.TBN * norm); 
-	norm = mat3(transpose(inverse(fs_in.View))) * norm;
-	//norm.y = -norm.y;
+		//transform normal from tangent to model space
+		norm = normalize(fs_in.TBN * norm); 
+		norm = mat3(transpose(inverse(fs_in.View))) * norm;
+		//norm.y = -norm.y;
+	}
 
 	// store the fragment position vector in the first gbuffer texture
     gPosition = vec4(fs_in.FragPosView ,1);
@@ -156,6 +166,6 @@ void main()
     // and the diffuse per-fragment color
     gAlbedoSpec.rgb = texture(material.texture_diffuse, texCoords).rgb;
     // store specular intensity in gAlbedoSpec's alpha component
-    gAlbedoSpec.a = texture(material.texture_specular, texCoords).r;
+    gAlbedoSpec.a = 1;
 
 }

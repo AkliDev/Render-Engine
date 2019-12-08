@@ -159,6 +159,7 @@
     <ClInclude Include="Utility\Headers\Timer.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\basiclighting.frag" />
     <None Include="shaders\blur.frag" />
     <None Include="shaders\color.frag" />
     <None Include="shaders\depth.frag" />
@@ -186,7 +187,9 @@
     <None Include="shaders\shadowlight.vert" />
     <None Include="shaders\skybox.frag" />
     <None Include="shaders\skybox.vert" />
+    <None Include="shaders\ssaoblurshader.frag" />
     <None Include="shaders\ssaogbuffershader.frag" />
+    <None Include="shaders\ssaolighting.frag" />
     <None Include="shaders\ssaoshader.frag" />
     <None Include="shaders\texture.frag" />
     <None Include="shaders\texture.vert" />

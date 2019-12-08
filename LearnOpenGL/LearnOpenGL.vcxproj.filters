@@ -208,5 +208,14 @@
     <None Include="shaders\gworldspacelighting.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
+    <None Include="shaders\basiclighting.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\ssaoblurshader.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\ssaolighting.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

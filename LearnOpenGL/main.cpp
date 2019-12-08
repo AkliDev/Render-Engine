@@ -49,12 +49,12 @@ float lastY = 600.0 / 2.0;
 float deltaTime = 0.0f;	// Time between current frame and last frame
 float lastFrame = 0.0f; // Time of last frame
 
+Camera myCamera;
+
 float lerp(float a, float b, float f)
 {
 	return a + f * (b - a);
 }
-
-Camera myCamera;
 
 int main()
 {
@@ -173,8 +173,8 @@ int main()
 	};
 
 	//Model SponzaModel("models/Sponza/sponza.obj");
-	Model Zero("models/plane.fbx");
-
+	Model testModel("models/zero/Zero.fbx");
+	Model floor("models/plane.fbx");
 	unsigned int skyboxVAO, skyboxVBO;
 	glGenVertexArrays(1, &skyboxVAO);
 	glGenBuffers(1, &skyboxVBO);
@@ -187,15 +187,19 @@ int main()
 
 	unsigned int skyboxTexture = loadCubemap(faces);
 	unsigned int diff = loadTexture("textures/wood.png", false);
-	unsigned int spec = loadTexture("textures/download.png", false);
+	unsigned int spec = loadTexture("textures/eye.png", false);
 	unsigned int norm = loadTexture("textures/toy_box_normal.png", false);
 	unsigned int depth = loadTexture("textures/toy_box_disp.png", false);
+	unsigned int black = loadTexture("textures/black.png", false);
+
+	Shader gBufferShader("shaders/vertex.vert", "shaders/ssaogbuffershader.frag");
+	Shader lightingPassShader("shaders/texture.vert", "shaders/gviewspacelighting.frag");
+	Shader ssaoShader("shaders/texture.vert", "shaders/ssaoshader.frag");
+	Shader ssaoBlurShader("shaders/texture.vert", "shaders/ssaoblurshader.frag");
 
 	Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag");
 	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
-	Shader renderShader("shaders/texture.vert", "shaders/gworldspacelighting.frag");
-	Shader gBufferShader("shaders/vertex.vert", "shaders/gbuffershader.frag");
-
+	
 	unsigned int uniformBlockIndex = glGetUniformBlockIndex(gBufferShader.ID, "Matrices");
 	glUniformBlockBinding(gBufferShader.ID, uniformBlockIndex, 0);
 	glUniformBlockBinding(colorShader.ID, uniformBlockIndex, 0);
@@ -229,6 +233,8 @@ int main()
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
 	// normal color buffer
 	glGenTextures(1, &gNormal);
@@ -258,23 +264,38 @@ int main()
 		std::cout << "Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	unsigned int ssaoFBO;
-	glGenFramebuffers(1, &ssaoFBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+	// also create framebuffer to hold SSAO processing stage 
+   // -----------------------------------------------------
+	unsigned int ssaoFBO, ssaoBlurFBO;
+	glGenFramebuffers(1, &ssaoFBO);  glGenFramebuffers(1, &ssaoBlurFBO);
 
-	unsigned int ssaoColorBuffer;
+	glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+	unsigned int ssaoColorBuffer, ssaoColorBufferBlur;
+	// SSAO color buffer
 	glGenTextures(1, &ssaoColorBuffer);
 	glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBuffer, 0);
-
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "Framebuffer not complete!" << std::endl;
+		std::cout << "SSAO Framebuffer not complete!" << std::endl;
+
+	// and blur stage
+	glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
+	glGenTextures(1, &ssaoColorBufferBlur);
+	glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBufferBlur, 0);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "SSAO Blur Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-	std::uniform_real_distribution<float> randomFloats(0.0, 1.0); // random floats between 0.0 - 1.0
+	// generate sample kernel
+   // ----------------------
+	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0); // generates random floats between 0.0 and 1.0
 	std::default_random_engine generator;
 	std::vector<glm::vec3> ssaoKernel;
 	for (unsigned int i = 0; i < 64; ++i)
@@ -282,24 +303,25 @@ int main()
 		glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
 		sample = glm::normalize(sample);
 		sample *= randomFloats(generator);
-		float scale = (float)i / 64.0;
+		float scale = float(i) / 64.0;
+
+		// scale samples s.t. they're more aligned to center of kernel
 		scale = lerp(0.1f, 1.0f, scale * scale);
 		sample *= scale;
 		ssaoKernel.push_back(sample);
-		ssaoKernel.push_back(sample);
 	}
 
+	// generate noise texture
+	// ----------------------
 	std::vector<glm::vec3> ssaoNoise;
 	for (unsigned int i = 0; i < 16; i++)
 	{
-		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f);
+		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f); // rotate around z-axis (in tangent space)
 		ssaoNoise.push_back(noise);
 	}
-
-	unsigned int noiseTexture;
-	glGenTextures(1, &noiseTexture);
+	unsigned int noiseTexture; glGenTextures(1, &noiseTexture);
 	glBindTexture(GL_TEXTURE_2D, noiseTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, &ssaoNoise[0]);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 4, 4, 0, GL_RGB, GL_FLOAT, &ssaoNoise[0]);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -322,11 +344,15 @@ int main()
 
 	// lighting info
 	// -------------
-	glm::vec3 lightPos(0, 1, 2);
+	glm::vec3 lightPos(0, 1, 1);
 	glm::vec3 lightColor(1);
+	float constant = 1.0f; // note that we don't send this to the shader, we assume it is always 1.0 (in our case)
+	float linear = 0.7f;
+	float quadratic = 1.8f;
 
 	glm::vec3 modelPosition(0, 0, 0);
-	glm::vec3 modelRotation(0, 0, 0);
+	glm::vec3 modelRotation(-90, 0, 0);
+	glm::vec3 modelScale(1);
 
 	// render loop
 	while (!glfwWindowShouldClose(window))
@@ -353,7 +379,7 @@ int main()
 
 		// reset viewport
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-		glClearColor(0,0,0,0);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		view = glm::lookAt(myCamera.Position, myCamera.Position + myCamera.Front, myCamera.Up);
@@ -377,29 +403,55 @@ int main()
 		gBufferShader.setFloat("material.heightscale", heightScale); // adjust with Q and E keys
 		
 		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(0,0,1.0f));
+		model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1, 0, 0));
+		model = glm::scale(model, glm::vec3(0.05f));
+		gBufferShader.setMat4("model", model);
+		gBufferShader.setVec3("cameraPos", myCamera.Position);
+		floor.Draw(gBufferShader);
+
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, black);
+		gBufferShader.setInt("material.texture_normal", 2);
+		glActiveTexture(GL_TEXTURE3);
+		glBindTexture(GL_TEXTURE_2D, black);
+		gBufferShader.setInt("material.texture_depth", 3);
+
+		model = glm::mat4(1.0f);
 		model = glm::translate(model, modelPosition);
 		model = glm::scale(model, glm::vec3(0.05f));
 		model = glm::rotate(model, glm::radians(modelRotation.x), glm::vec3(1, 0, 0));
 		model = glm::rotate(model, glm::radians(modelRotation.y), glm::vec3(0, 1, 0));
 		model = glm::rotate(model, glm::radians(modelRotation.z), glm::vec3(0, 0, 1));
-
+		model = glm::scale(model, modelScale);
 		gBufferShader.setMat4("model", model);
-		gBufferShader.setVec3("cameraPos", myCamera.Position);
-		Zero.Draw(gBufferShader);
+		testModel.Draw(gBufferShader);
 
-		//// draw skybox as last
-		//glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+		// 2. generate SSAO texture
+		// ------------------------
+		glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
+		glClear(GL_COLOR_BUFFER_BIT);
+		ssaoShader.use();
+		// Send kernel + rotation 
+		for (unsigned int i = 0; i < 64; ++i)
+			ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+		ssaoShader.setMat4("projection", projection);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, gPosition);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, gNormal);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, noiseTexture);
+		renderQuad();
 
-		//skyboxShader.use();
-		//view = glm::mat4(glm::mat3(myCamera.GetViewMatrix()));
-		//skyboxShader.setMat4("projection", projection);
-		//skyboxShader.setMat4("view", view);
-
-		//glBindVertexArray(skyboxVAO);
-		//glActiveTexture(GL_TEXTURE0);
-		//glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
-		//glDrawArrays(GL_TRIANGLES, 0, 36);
-		//glDepthFunc(GL_LESS); // set depth function back to default
+		// 3. blur SSAO texture to remove noise
+		// ------------------------------------
+		glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
+		glClear(GL_COLOR_BUFFER_BIT);
+		ssaoBlurShader.use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+		renderQuad();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glDisable(GL_DEPTH_TEST);
@@ -407,34 +459,33 @@ int main()
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glClearColor(0, 0, 0, 0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 		// render render map to quad for visual 
 		// ---------------------------------------------
-		renderShader.use();
+		lightingPassShader.use();
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gPosition);
-		renderShader.setInt("gPosition", 0);
+		lightingPassShader.setInt("gPosition", 0);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, gNormal);
-		renderShader.setInt("gNormal", 1);
+		lightingPassShader.setInt("gNormal", 1);
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-		renderShader.setInt("gAlbedoSpec", 2);
-		renderShader.setVec3("viewPos", myCamera.Position);
-		renderShader.setVec3("lights[0].Position", lightPos);		
-		renderShader.setVec3("lights[0].Color", lightColor);
-		renderShader.setMat4("viewMatrix", view);
+		lightingPassShader.setInt("gAlbedoSpec", 2);
+		glActiveTexture(GL_TEXTURE3);
+		glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
+		lightingPassShader.setInt("ssao", 3);
+		lightingPassShader.setVec3("viewPos", myCamera.Position);
+		lightingPassShader.setVec3("lights[0].Position", lightPos);		
+		lightingPassShader.setVec3("lights[0].Color", lightColor);
+		lightingPassShader.setMat4("viewMatrix", view);
 
 		// update attenuation parameters and calculate radius
-		const float constant = 1.0f; // note that we don't send this to the shader, we assume it is always 1.0 (in our case)
-		const float linear = 0.7f;
-		const float quadratic = 1.8f;
-		renderShader.setFloat("lights[0].Linear", linear);
-		renderShader.setFloat("lights[0].Quadratic", quadratic);
+		lightingPassShader.setFloat("lights[0].Linear", linear);
+		lightingPassShader.setFloat("lights[0].Quadratic", quadratic);
 		// then calculate radius of light volume/sphere
 		const float maxBrightness = std::fmaxf(std::fmaxf(lightColor.r, lightColor.g), lightColor.b);
 		float radius = (-linear + std::sqrt(linear * linear - 4 * quadratic * (constant - (256.0f / 5.0f) * maxBrightness))) / (2.0f * quadratic);
-		renderShader.setFloat("lights[0].Radius", radius);
+		lightingPassShader.setFloat("lights[0].Radius", radius);
 
 		renderQuad();
 
@@ -446,7 +497,7 @@ int main()
 		glEnable(GL_DEPTH_TEST);
 
 		// now render light cubes as before
-		//
+		
 		colorShader.use();
 		model = glm::mat4(1.0f);
 		model = glm::translate(model, lightPos);
@@ -454,6 +505,20 @@ int main()
 		colorShader.setMat4("model", model);
 		colorShader.setVec3("color", lightColor);
 		renderCube();
+
+		// draw skybox as last
+		glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
+
+		skyboxShader.use();
+		view = glm::mat4(glm::mat3(myCamera.GetViewMatrix()));
+		skyboxShader.setMat4("projection", projection);
+		skyboxShader.setMat4("view", view);
+
+		glBindVertexArray(skyboxVAO);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+		glDepthFunc(GL_LESS); // set depth function back to default
 
 		{
 			ImGui::Begin("Stats");
@@ -465,6 +530,9 @@ int main()
 			ImGui::Begin("Light Editor");
 			ImGui::DragFloat3("light position", (float*)&lightPos.x, 0.10f);
 			ImGui::ColorEdit3("light color", (float*)&lightColor.x, 0.10f);
+			ImGui::DragFloat("light constant", (float*)&constant, 0.10f);
+			ImGui::DragFloat("light linear", (float*)&linear, 0.10f);
+			ImGui::DragFloat("light quadratic", (float*)&quadratic, 0.10f);
 			ImGui::End();
 		}
 
@@ -472,6 +540,7 @@ int main()
 			ImGui::Begin("Model Editor");
 			ImGui::DragFloat3("model position", (float*)&modelPosition.x, 0.10f);
 			ImGui::DragFloat3("model rotation", (float*)&modelRotation.x, 0.10f);
+			ImGui::DragFloat3("model scale", (float*)&modelScale.x, 0.10f);
 			ImGui::End();
 		}
 

@@ -135,20 +135,23 @@ void main()
 	// offset texture coordinates with Parallax Mapping
 	vec3 viewDir = normalize(fs_in.TangentCameraPos - fs_in.TangentFragPos); // tangent space view direction
 	texCoords = ParallaxMapping(fs_in.TexCoords,  viewDir);       
-    if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
-        discard;
+//    if(texCoords.x > 1.0 || texCoords.y > 1.0 || texCoords.x < 0.0 || texCoords.y < 0.0)
+//        discard;
 
 	// obtain normal from normal map in range [0,1]
     vec3 norm = normalize(texture(material.texture_normal, texCoords).rgb);
     // transform normal vector to range [-1,1]
 	norm = texture(material.texture_normal, texCoords).rgb;
+	if(norm == vec3(0))
+		norm = fs_in.NormalWorld;
+	else
+	{
 	norm = normalize(norm * 2.0 - 1.0); 
-
 	//transform normal from tangent to model space
 	norm = normalize(fs_in.TBN * norm);
-
 	//norm.y = -norm.y;
-
+	}
+	
 	// store the fragment position vector in the first gbuffer texture
     gPosition = vec4(fs_in.FragPosWorld,1);
     // also store the per-fragment normals into the gbuffer
