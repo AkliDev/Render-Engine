@@ -5,6 +5,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <ft2build.h>
+#include FT_FREETYPE_H  
+
 #include <random>
 #include <iostream>
 #include "Shader.h"
@@ -31,9 +34,11 @@ unsigned int loadCubemap(std::vector<std::string> faces);
 void renderScene(const Shader &shader);
 void renderCube();
 void renderQuad();
+void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);
 
-void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity,
-	GLsizei length, const GLchar *message, void *userParam);
+GLenum glCheckError_(const char *file, int line);
+#define glCheckError() glCheckError_(__FILE__, __LINE__) 
+void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 
 // settings
 const unsigned int SCR_WIDTH = 1000;
@@ -51,6 +56,17 @@ float lastFrame = 0.0f; // Time of last frame
 
 Camera myCamera;
 
+struct Character 
+{
+	GLuint     TextureID;  // ID handle of the glyph texture
+	glm::ivec2 Size;       // Size of glyph
+	glm::ivec2 Bearing;    // Offset from baseline to left/top of glyph
+	GLuint     Advance;    // Offset to advance to next glyph
+};
+
+std::map<GLchar, Character> Characters;
+GLuint textVAO, VBO;
+
 float lerp(float a, float b, float f)
 {
 	return a + f * (b - a);
@@ -60,12 +76,13 @@ int main()
 {
 	SetSeed();
 	glfwInit();
-	
+
 	// GL 3.0 + GLSL 130
-	const char* glsl_version = "#version 130";
+	const char* glsl_version = "#version 330";
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 
 	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
 	if (window == NULL)
@@ -82,6 +99,16 @@ int main()
 		std::cout << "Failed to initialize GLAD" << std::endl;
 		glfwTerminate();
 		return -1;
+	}
+
+
+	GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+	{
+		glEnable(GL_DEBUG_OUTPUT);
+		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+		glDebugMessageCallback(glDebugOutput, nullptr);
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
 	}
 
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -106,16 +133,6 @@ int main()
 	myCamera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
-
-	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-	GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
-	{
-		glEnable(GL_DEBUG_OUTPUT);
-		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-		glDebugMessageCallback(nullptr, glDebugOutput);
-		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-	}
 
 	float skyboxVertices[] = {
 		// positions          
@@ -172,6 +189,77 @@ int main()
 		"textures/lightblue/back.png",
 	};
 
+
+	Shader gBufferShader("shaders/vertex.vert", "shaders/ssaogbuffershader.frag");
+	Shader lightingPassShader("shaders/texture.vert", "shaders/gviewspacelighting.frag");
+	Shader ssaoShader("shaders/texture.vert", "shaders/ssaoshader.frag");
+	Shader ssaoBlurShader("shaders/texture.vert", "shaders/ssaoblurshader.frag");
+
+	Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag");
+	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
+
+	Shader fontShader("shaders/font.vert", "shaders/font.frag");
+
+	//init FreeType
+	FT_Library ft;
+	if (FT_Init_FreeType(&ft))
+		std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+	FT_Face face;
+	if (FT_New_Face(ft, "fonts/zeldadxt.ttf", 0, &face))
+		std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
+	FT_Set_Pixel_Sizes(face, 0, 48);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Disable byte-alignment restriction
+	for (GLubyte c = 0; c < 128; c++)
+	{
+		// Load character glyph 
+		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
+		{
+			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
+			continue;
+		}
+		// Generate texture
+		GLuint texture;
+		glGenTextures(1, &texture);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_RED,
+			face->glyph->bitmap.width,
+			face->glyph->bitmap.rows,
+			0,
+			GL_RED,
+			GL_UNSIGNED_BYTE,
+			face->glyph->bitmap.buffer
+		);
+		// Set texture options
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		// Now store character for later use
+		Character character = {
+			texture,
+			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
+			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
+			face->glyph->advance.x
+		};
+		Characters.insert(std::pair<GLchar, Character>(c, character));
+	}
+
+	FT_Done_Face(face);
+	FT_Done_FreeType(ft);
+
+	glGenVertexArrays(1, &textVAO);
+	glGenBuffers(1, &VBO);
+	glBindVertexArray(textVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
 	//Model SponzaModel("models/Sponza/sponza.obj");
 	Model testModel("models/zero/Zero.fbx");
 	Model floor("models/plane.fbx");
@@ -192,14 +280,6 @@ int main()
 	unsigned int depth = loadTexture("textures/toy_box_disp.png", false);
 	unsigned int black = loadTexture("textures/black.png", false);
 
-	Shader gBufferShader("shaders/vertex.vert", "shaders/ssaogbuffershader.frag");
-	Shader lightingPassShader("shaders/texture.vert", "shaders/gviewspacelighting.frag");
-	Shader ssaoShader("shaders/texture.vert", "shaders/ssaoshader.frag");
-	Shader ssaoBlurShader("shaders/texture.vert", "shaders/ssaoblurshader.frag");
-
-	Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag");
-	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
-	
 	unsigned int uniformBlockIndex = glGetUniformBlockIndex(gBufferShader.ID, "Matrices");
 	glUniformBlockBinding(gBufferShader.ID, uniformBlockIndex, 0);
 	glUniformBlockBinding(colorShader.ID, uniformBlockIndex, 0);
@@ -215,7 +295,10 @@ int main()
 	//ModelViewProjectionMatricis 
 	glm::mat4 model = glm::mat4(1.0f);
 	glm::mat4 view = glm::mat4(1.0f);
-	glm::mat4 projection = glm::perspective(glm::radians(myCamera.Zoom), (float)SCR_HEIGHT / (float)SCR_HEIGHT, 0.1f, 100.0f); 	// note that we're translating the scene in the reverse direction of where we want to move		
+	glm::mat4 projection = glm::perspective(glm::radians(myCamera.Zoom), (float)SCR_HEIGHT / (float)SCR_HEIGHT, 0.1f, 100.0f); 	// note that we're translating the scene in the reverse direction of where we want to move	
+	glm::mat4 textProjection = glm::ortho(0.0f, (float)SCR_WIDTH, 0.0f, (float)SCR_HEIGHT);
+	fontShader.use();
+	fontShader.setMat4("projection", textProjection);
 
 	glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
 	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection));
@@ -293,6 +376,7 @@ int main()
 		std::cout << "SSAO Blur Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+
 	// generate sample kernel
    // ----------------------
 	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0); // generates random floats between 0.0 and 1.0
@@ -344,7 +428,7 @@ int main()
 
 	// lighting info
 	// -------------
-	glm::vec3 lightPos(0, 1, 1);
+	glm::vec3 lightPos(0, 4, 1);
 	glm::vec3 lightColor(1);
 	float constant = 1.0f; // note that we don't send this to the shader, we assume it is always 1.0 (in our case)
 	float linear = 0.7f;
@@ -352,7 +436,9 @@ int main()
 
 	glm::vec3 modelPosition(0, 0, 0);
 	glm::vec3 modelRotation(-90, 0, 0);
-	glm::vec3 modelScale(1);
+	glm::vec3 modelScale(5);
+
+	bool occlusion = false;
 
 	// render loop
 	while (!glfwWindowShouldClose(window))
@@ -438,10 +524,13 @@ int main()
 		ssaoShader.setMat4("projection", projection);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gPosition);
+		ssaoShader.setInt("gPosition", 0);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, gNormal);
+		ssaoShader.setInt("gNormal", 1);
 		glActiveTexture(GL_TEXTURE2);
 		glBindTexture(GL_TEXTURE_2D, noiseTexture);
+		ssaoShader.setInt("texNoise", 2);
 		renderQuad();
 
 		// 3. blur SSAO texture to remove noise
@@ -451,6 +540,7 @@ int main()
 		ssaoBlurShader.use();
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
+		ssaoBlurShader.setInt("ssaoInput", 0);
 		renderQuad();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -462,6 +552,7 @@ int main()
 		// render render map to quad for visual 
 		// ---------------------------------------------
 		lightingPassShader.use();
+		lightingPassShader.setBool("occlusion", occlusion);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gPosition);
 		lightingPassShader.setInt("gPosition", 0);
@@ -506,7 +597,7 @@ int main()
 		colorShader.setVec3("color", lightColor);
 		renderCube();
 
-		// draw skybox as last
+		// draw skybox
 		glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
 
 		skyboxShader.use();
@@ -519,6 +610,9 @@ int main()
 		glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
 		glDrawArrays(GL_TRIANGLES, 0, 36);
 		glDepthFunc(GL_LESS); // set depth function back to default
+		
+		RenderText(fontShader, "Akli was here", 25, 960, 1.0f, lightColor);
+		RenderText(fontShader, "This font is very nostalgic", 25.0f, 25.0f, 1.0f, lightColor);
 
 		{
 			ImGui::Begin("Stats");
@@ -541,6 +635,7 @@ int main()
 			ImGui::DragFloat3("model position", (float*)&modelPosition.x, 0.10f);
 			ImGui::DragFloat3("model rotation", (float*)&modelRotation.x, 0.10f);
 			ImGui::DragFloat3("model scale", (float*)&modelScale.x, 0.10f);
+			ImGui::Checkbox("Show SSAO", &occlusion);
 			ImGui::End();
 		}
 
@@ -679,6 +774,50 @@ void renderQuad()
 	glBindVertexArray(quadVAO);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	glBindVertexArray(0);
+}
+
+void RenderText(Shader &s, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color)
+{
+	// Activate corresponding render state	
+	s.use();
+	s.setVec3("textColor", color);
+	glActiveTexture(GL_TEXTURE0);
+	glBindVertexArray(textVAO);
+
+	// Iterate through all characters
+	std::string::const_iterator c;
+	for (c = text.begin(); c != text.end(); c++)
+	{
+		Character ch = Characters[*c];
+
+		GLfloat xpos = x + ch.Bearing.x * scale;
+		GLfloat ypos = y - (ch.Size.y - ch.Bearing.y) * scale;
+
+		GLfloat w = ch.Size.x * scale;
+		GLfloat h = ch.Size.y * scale;
+		// Update VBO for each character
+		GLfloat vertices[6][4] = {
+			{ xpos,     ypos + h,   0.0, 0.0 },
+			{ xpos,     ypos,       0.0, 1.0 },
+			{ xpos + w, ypos,       1.0, 1.0 },
+
+			{ xpos,     ypos + h,   0.0, 0.0 },
+			{ xpos + w, ypos,       1.0, 1.0 },
+			{ xpos + w, ypos + h,   1.0, 0.0 }
+		};
+		// Render glyph texture over quad
+		glBindTexture(GL_TEXTURE_2D, ch.TextureID);
+		// Update content of VBO memory
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		// Render quad
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		// Now advance cursors for next glyph (note that advance is number of 1/64 pixels)
+		x += (ch.Advance >> 6) * scale; // Bitshift by 6 to get value in pixels (2^6 = 64)
+	}
+	glBindVertexArray(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void processInput(GLFWwindow* window)
@@ -838,13 +977,34 @@ unsigned int loadCubemap(std::vector<std::string> faces)
 	return textureID;
 }
 
+GLenum glCheckError_(const char *file, int line)
+{
+	GLenum errorCode;
+	while ((errorCode = glGetError()) != GL_NO_ERROR)
+	{
+		std::string error;
+		switch (errorCode)
+		{
+		case GL_INVALID_ENUM:                  error = "INVALID_ENUM"; break;
+		case GL_INVALID_VALUE:                 error = "INVALID_VALUE"; break;
+		case GL_INVALID_OPERATION:             error = "INVALID_OPERATION"; break;
+		case GL_STACK_OVERFLOW:                error = "STACK_OVERFLOW"; break;
+		case GL_STACK_UNDERFLOW:               error = "STACK_UNDERFLOW"; break;
+		case GL_OUT_OF_MEMORY:                 error = "OUT_OF_MEMORY"; break;
+		case GL_INVALID_FRAMEBUFFER_OPERATION: error = "INVALID_FRAMEBUFFER_OPERATION"; break;
+		}
+		std::cout << error << " | " << file << " (" << line << ")" << std::endl;
+	}
+	return errorCode;
+}
+
 void APIENTRY glDebugOutput(GLenum source,
 	GLenum type,
 	GLuint id,
 	GLenum severity,
 	GLsizei length,
 	const GLchar *message,
-	void *userParam)
+	const void *userParam)
 {
 	// ignore non-significant error/warning codes
 	if (id == 131169 || id == 131185 || id == 131218 || id == 131204) return;

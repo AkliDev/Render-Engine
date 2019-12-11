@@ -20,7 +20,7 @@ const int NR_LIGHTS = 1;
 uniform Light lights[NR_LIGHTS];
 uniform vec3 viewPos;
 uniform mat4 viewMatrix;
-
+uniform bool occlusion;
 
 void main()
 {             
@@ -32,7 +32,7 @@ void main()
 	float AmbientOcclusion = texture(ssao, TexCoords).r;
     
     // then calculate lighting as usual
-    vec3 ambient = vec3(0.3 * Diffuse * AmbientOcclusion);
+    vec3 ambient = vec3(0.3 * Diffuse * (AmbientOcclusion));
     vec3 lighting  = ambient; 
     vec3 viewDir  = normalize(-FragPos);
 
@@ -58,5 +58,8 @@ void main()
             lighting += diffuse + specular;
         }
     }    
-    FragColor = vec4(vec3(AmbientOcclusion), 1.0);
+    FragColor = vec4(lighting,1);
+
+	if(occlusion)
+	  FragColor = vec4(vec3(AmbientOcclusion),1);
 }

@@ -217,5 +217,11 @@
     <None Include="shaders\ssaolighting.frag">
       <Filter>Resource Files\Shaders</Filter>
     </None>
+    <None Include="shaders\font.frag">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\font.vert">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>
