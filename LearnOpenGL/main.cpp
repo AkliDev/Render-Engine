@@ -302,7 +302,7 @@ int main(int argc, char *argv[])
 	glm::mat4 view = glm::mat4(1.0f);
 	glm::mat4 projection = glm::perspective(glm::radians(myCamera.Zoom), (float)SCR_HEIGHT / (float)SCR_HEIGHT, 0.1f, 100.0f); 	// note that we're translating the scene in the reverse direction of where we want to move	
 	glm::mat4 textProjection = glm::ortho(0.0f, (float)SCR_WIDTH, 0.0f, (float)SCR_HEIGHT);
-	fontShader.use();
+	fontShader.Use();
 	fontShader.setMat4("projection", textProjection);
 
 	glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
@@ -478,7 +478,7 @@ int main(int argc, char *argv[])
 		glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
 		glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-		gBufferShader.use();
+		gBufferShader.Use();
 		glActiveTexture(GL_TEXTURE0);
 		diff.Bind();
 		gBufferShader.setInt("material.texture_diffuse", 0);
@@ -522,7 +522,7 @@ int main(int argc, char *argv[])
 		// ------------------------
 		glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
 		glClear(GL_COLOR_BUFFER_BIT);
-		ssaoShader.use();
+		ssaoShader.Use();
 		// Send kernel + rotation 
 		for (unsigned int i = 0; i < 64; ++i)
 			ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
@@ -542,7 +542,7 @@ int main(int argc, char *argv[])
 		// ------------------------------------
 		glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
 		glClear(GL_COLOR_BUFFER_BIT);
-		ssaoBlurShader.use();
+		ssaoBlurShader.Use();
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
 		ssaoBlurShader.setInt("ssaoInput", 0);
@@ -556,7 +556,7 @@ int main(int argc, char *argv[])
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		// render render map to quad for visual 
 		// ---------------------------------------------
-		lightingPassShader.use();
+		lightingPassShader.Use();
 		lightingPassShader.setBool("occlusion", occlusion);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -594,7 +594,7 @@ int main(int argc, char *argv[])
 
 		// now render light cubes as before
 		
-		colorShader.use();
+		colorShader.Use();
 		model = glm::mat4(1.0f);
 		model = glm::translate(model, lightPos);
 		model = glm::scale(model, glm::vec3(0.3f));
@@ -605,7 +605,7 @@ int main(int argc, char *argv[])
 		// draw skybox
 		glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
 
-		skyboxShader.use();
+		skyboxShader.Use();
 		view = glm::mat4(glm::mat3(myCamera.GetViewMatrix()));
 		skyboxShader.setMat4("projection", projection);
 		skyboxShader.setMat4("view", view);
@@ -783,7 +783,7 @@ void renderQuad()
 void RenderText(Shader &s, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color)
 {
 	// Activate corresponding render state	
-	s.use();
+	s.Use();
 	s.setVec3("textColor", color);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(textVAO);

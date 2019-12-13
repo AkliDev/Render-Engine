@@ -40,7 +40,7 @@ void Shader::Compile(const GLchar* vertexSource, const GLchar* fragmentSource, c
 
 // activate the shader
 // ------------------------------------------------------------------------
-void Shader::use() const
+void Shader::Use() const
 {
 	glUseProgram(ID);
 }

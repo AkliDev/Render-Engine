@@ -20,7 +20,7 @@ Shader ResourceManager::LoadShader(const GLchar *vShaderFile, const GLchar *fSha
 
 Shader ResourceManager::GetShader(std::string name)
 {
-	return Shader();
+	return Shaders[name];
 }
 
 Texture2D ResourceManager::LoadTexture(const GLchar *file, GLboolean gammaCorrection, std::string name)
