@@ -10,8 +10,13 @@
 
 #include <random>
 #include <iostream>
+
+#include "ResourceManager.h"
 #include "Shader.h"
+#include "Texture.h"
+
 #include "Camera.h"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -29,7 +34,6 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
-unsigned int loadTexture(char const * path, bool gammaCorrection);
 unsigned int loadCubemap(std::vector<std::string> faces);
 void renderScene(const Shader &shader);
 void renderCube();
@@ -72,7 +76,7 @@ float lerp(float a, float b, float f)
 	return a + f * (b - a);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
 	SetSeed();
 	glfwInit();
@@ -190,15 +194,16 @@ int main()
 	};
 
 
-	Shader gBufferShader("shaders/vertex.vert", "shaders/ssaogbuffershader.frag");
-	Shader lightingPassShader("shaders/texture.vert", "shaders/gviewspacelighting.frag");
-	Shader ssaoShader("shaders/texture.vert", "shaders/ssaoshader.frag");
-	Shader ssaoBlurShader("shaders/texture.vert", "shaders/ssaoblurshader.frag");
+	Shader gBufferShader = ResourceManager::LoadShader("shaders/vertex.vert", "shaders/ssaogbuffershader.frag", nullptr, "gBufferShader");
+	Shader lightingPassShader = ResourceManager::LoadShader("shaders/texture.vert", "shaders/gviewspacelighting.frag", nullptr, "lightingPassShader");
+	Shader ssaoShader = ResourceManager::LoadShader("shaders/texture.vert", "shaders/ssaoshader.frag", nullptr, "ssaoShader");
+	Shader ssaoBlurShader = ResourceManager::LoadShader("shaders/texture.vert", "shaders/ssaoblurshader.frag", nullptr, "ssaoBlurShader");
 
-	Shader skyboxShader("shaders/skybox.vert", "shaders/skybox.frag");
-	Shader colorShader("shaders/vertex.vert", "shaders/color.frag");
+	Shader skyboxShader = ResourceManager::LoadShader("shaders/skybox.vert", "shaders/skybox.frag", nullptr, "skyboxShader");
+	Shader colorShader = ResourceManager::LoadShader("shaders/vertex.vert", "shaders/color.frag", nullptr, "colorShader");
 
-	Shader fontShader("shaders/font.vert", "shaders/font.frag");
+	//Shader fontShader("shaders/font.vert", "shaders/font.frag");
+	Shader fontShader = ResourceManager::LoadShader("shaders/font.vert", "shaders/font.frag", nullptr, "fontShader");
 
 	//init FreeType
 	FT_Library ft;
@@ -274,11 +279,11 @@ int main()
 	glBindVertexArray(0);
 
 	unsigned int skyboxTexture = loadCubemap(faces);
-	unsigned int diff = loadTexture("textures/wood.png", false);
-	unsigned int spec = loadTexture("textures/eye.png", false);
-	unsigned int norm = loadTexture("textures/toy_box_normal.png", false);
-	unsigned int depth = loadTexture("textures/toy_box_disp.png", false);
-	unsigned int black = loadTexture("textures/black.png", false);
+	Texture2D diff = ResourceManager::LoadTexture("textures/wood.png", false, "diff");
+	Texture2D spec = ResourceManager::LoadTexture("textures/eye.png", false, "spec");
+	Texture2D norm = ResourceManager::LoadTexture("textures/toy_box_normal.png", false, "norm");
+	Texture2D depth = ResourceManager::LoadTexture("textures/toy_box_disp.png", false, "depth");
+	Texture2D black = ResourceManager::LoadTexture("textures/black.png", false, "black");
 
 	unsigned int uniformBlockIndex = glGetUniformBlockIndex(gBufferShader.ID, "Matrices");
 	glUniformBlockBinding(gBufferShader.ID, uniformBlockIndex, 0);
@@ -475,16 +480,16 @@ int main()
 
 		gBufferShader.use();
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, diff);
+		diff.Bind();
 		gBufferShader.setInt("material.texture_diffuse", 0);
 		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, spec);
+		spec.Bind();
 		gBufferShader.setInt("material.texture_specular", 1);
 		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, norm);
+		norm.Bind();
 		gBufferShader.setInt("material.texture_normal", 2);
 		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, depth);
+		depth.Bind();
 		gBufferShader.setInt("material.texture_depth", 3);
 		gBufferShader.setFloat("material.heightscale", heightScale); // adjust with Q and E keys
 		
@@ -497,10 +502,10 @@ int main()
 		floor.Draw(gBufferShader);
 
 		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, black);
+		black.Bind();
 		gBufferShader.setInt("material.texture_normal", 2);
 		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, black);
+		black.Bind();
 		gBufferShader.setInt("material.texture_depth", 3);
 
 		model = glm::mat4(1.0f);
@@ -655,7 +660,6 @@ int main()
 	glDeleteBuffers(1, &skyboxVBO);
 	glDeleteBuffers(1, &uboMatrices);
 	glDeleteBuffers(1, &gBuffer);
-	glDeleteBuffers(1, &spec);
 	glfwTerminate();
 
 	return 0;
@@ -895,54 +899,6 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
-}
-
-// utility function for loading a 2D texture from file
-// ---------------------------------------------------
-unsigned int loadTexture(char const * path, bool gammaCorrection)
-{
-	unsigned int textureID;
-	glGenTextures(1, &textureID);
-
-	int width, height, nrComponents;
-	unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
-	if (data)
-	{
-		GLenum internalFormat;
-		GLenum dataFormat;
-		if (nrComponents == 1)
-		{
-			internalFormat = dataFormat = GL_RED;
-		}
-		else if (nrComponents == 3)
-		{
-			internalFormat = gammaCorrection ? GL_SRGB : GL_RGB;
-			dataFormat = GL_RGB;
-		}
-		else if (nrComponents == 4)
-		{
-			internalFormat = gammaCorrection ? GL_SRGB_ALPHA : GL_RGBA;
-			dataFormat = GL_RGBA;
-		}
-
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, dataFormat, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		stbi_image_free(data);
-	}
-	else
-	{
-		std::cout << "Texture failed to load at path: " << path << std::endl;
-		stbi_image_free(data);
-	}
-
-	return textureID;
 }
 
 unsigned int loadCubemap(std::vector<std::string> faces)

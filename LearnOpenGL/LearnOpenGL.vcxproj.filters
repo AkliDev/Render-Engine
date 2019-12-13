@@ -16,34 +16,22 @@
     <Filter Include="Resource Files\Shaders">
       <UniqueIdentifier>{ec416cce-bb11-4438-8b7b-926ee8d00cf7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Utitly">
-      <UniqueIdentifier>{a41c23ed-bcb9-4762-a997-16e30c8be817}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Utitly\Headers">
-      <UniqueIdentifier>{d1af3b88-cbb5-4916-987e-6e549148a890}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\imgui">
       <UniqueIdentifier>{d8795da0-0a75-4b29-9348-04462fa2075c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Utility">
+      <UniqueIdentifier>{098b041b-2e91-485f-a3a6-f87c06b4c0e2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Utility">
+      <UniqueIdentifier>{3fda9803-a66a-4713-916e-378e3fae66c1}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\..\..\..\..\MaLibs\OpenGL\GLAD\src\glad.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Shader.h">
-      <Filter>Header Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Utility\PRNG.cpp">
-      <Filter>Utitly</Filter>
-    </ClCompile>
-    <ClCompile Include="Utility\Timer.cpp">
-      <Filter>Utitly</Filter>
-    </ClCompile>
-    <ClCompile Include="Utility\CheckCin.cpp">
-      <Filter>Utitly</Filter>
     </ClCompile>
     <ClCompile Include="Imgui\imgui.cpp">
       <Filter>Source Files\imgui</Filter>
@@ -63,6 +51,27 @@
     <ClCompile Include="Imgui\imgui_impl_opengl3.cpp">
       <Filter>Source Files\imgui</Filter>
     </ClCompile>
+    <ClCompile Include="Shader.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility\CheckCin.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility\PRNG.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="ResourceManager.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Shader.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Texture.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Utility\Timer.cpp">
+      <Filter>Source Files\Utility</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stb_image.h">
@@ -76,15 +85,6 @@
     </ClInclude>
     <ClInclude Include="Model.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Utility\Headers\PRNG.h">
-      <Filter>Utitly\Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Utility\Headers\Timer.h">
-      <Filter>Utitly\Headers</Filter>
-    </ClInclude>
-    <ClInclude Include="Utility\Headers\CheckCin.h">
-      <Filter>Utitly\Headers</Filter>
     </ClInclude>
     <ClInclude Include="Imgui\imconfig.h">
       <Filter>Source Files\imgui</Filter>
@@ -109,6 +109,21 @@
     </ClInclude>
     <ClInclude Include="Imgui\imgui_impl_opengl3.h">
       <Filter>Source Files\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility\Headers\CheckCin.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility\Headers\PRNG.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="ResourceManager.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
+      <Filter>Header Files\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Utility\Headers\Timer.h">
+      <Filter>Header Files\Utility</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

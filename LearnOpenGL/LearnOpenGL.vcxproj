@@ -136,7 +136,10 @@
     <ClCompile Include="Imgui\imgui_impl_opengl3.cpp" />
     <ClCompile Include="Imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="ResourceManager.cpp" />
+    <ClCompile Include="Shader.cpp" />
     <ClCompile Include="Shader.h" />
+    <ClCompile Include="Texture.cpp" />
     <ClCompile Include="Utility\CheckCin.cpp" />
     <ClCompile Include="Utility\PRNG.cpp" />
     <ClCompile Include="Utility\Timer.cpp" />
@@ -153,7 +156,9 @@
     <ClInclude Include="Imgui\imstb_truetype.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="ResourceManager.h" />
     <ClInclude Include="stb_image.h" />
+    <ClInclude Include="Texture.h" />
     <ClInclude Include="Utility\Headers\CheckCin.h" />
     <ClInclude Include="Utility\Headers\PRNG.h" />
     <ClInclude Include="Utility\Headers\Timer.h" />
