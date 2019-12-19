@@ -17,7 +17,7 @@ public:
 	Shader() = default;
 	// activate the shader
 	// ------------------------------------------------------------------------
-	void Use() const;
+	Shader& Use();
 	// Compiles the shader from given source code
 	void Compile(const GLchar* vertexSource, const GLchar* fragmentSource, const GLchar* geometrySource);
 	// utility uniform functions

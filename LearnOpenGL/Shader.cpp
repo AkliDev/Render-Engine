@@ -31,7 +31,7 @@ void Shader::Compile(const GLchar* vertexSource, const GLchar* fragmentSource, c
 		glAttachShader(this->ID, gShader);
 	glLinkProgram(this->ID);
 	checkCompileErrors(this->ID, "PROGRAM");
-	// Delete the shaders as they're linked into our program now and no longer necessery
+	// Delete the shaders as they're linked into our program now and no longer necessary
 	glDeleteShader(sVertex);
 	glDeleteShader(sFragment);
 	if (geometrySource != nullptr)
@@ -40,9 +40,10 @@ void Shader::Compile(const GLchar* vertexSource, const GLchar* fragmentSource, c
 
 // activate the shader
 // ------------------------------------------------------------------------
-void Shader::Use() const
+Shader& Shader::Use()
 {
-	glUseProgram(ID);
+    glUseProgram(this->ID);
+    return *this;
 }
 // utility uniform functions
 // ------------------------------------------------------------------------
@@ -52,6 +53,7 @@ void Shader::setBool(const std::string &name, bool value) const
 }
 // ------------------------------------------------------------------------
 void Shader::setInt(const std::string &name, int value) const
+
 {
 	glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
 }
@@ -117,11 +119,6 @@ void Shader::checkCompileErrors(GLuint shader, std::string type)
 			glGetShaderInfoLog(shader, 1024, NULL, infoLog);
 			std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
 		}
-		/*else
-		{
-			glGetShaderInfoLog(shader, 1024, NULL, infoLog);
-			std::cout << "SUCCSES::SHADER_COMPILATION_SUCCES of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
-		}*/
 	}
 	else
 	{
@@ -131,10 +128,5 @@ void Shader::checkCompileErrors(GLuint shader, std::string type)
 			glGetProgramInfoLog(shader, 1024, NULL, infoLog);
 			std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
 		}
-		/*else
-		{
-			glGetProgramInfoLog(shader, 1024, NULL, infoLog);
-			std::cout << "SUCCES::PROGRAM_LINKING_SUCCES of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
-		}*/
 	}
 }

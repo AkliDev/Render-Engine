@@ -70,12 +70,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\MaLibs\freetype-windows-binaries-master\win32;C:\MaLibs\OpenGL\Assimp\lib;C:\MaLibs\OpenGL\GLFW\lib-vc2019;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\MaLibs\irrKlang\include;C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\MaLibs\irrKlang\lib\Win32-visualStudio;C:\MaLibs\freetype-windows-binaries-master\win32;C:\MaLibs\OpenGL\Assimp\lib;C:\MaLibs\OpenGL\GLFW\lib-vc2019;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\MaLibs\freetype-windows-binaries-master\win32;C:\MaLibs\OpenGL\Assimp\lib;C:\MaLibs\OpenGL\GLFW\lib-vc2019;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\MaLibs\irrKlang\include;C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\MaLibs\irrKlang\lib\Win32-visualStudio;C:\MaLibs\freetype-windows-binaries-master\win32;C:\MaLibs\OpenGL\Assimp\lib;C:\MaLibs\OpenGL\GLFW\lib-vc2019;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -83,10 +83,10 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\MaLibs\Assimp\include;C:\MaLibs\OpenGL\Assimp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\MaLibs\irrKlang\include;C:\MaLibs\Assimp\include;C:\MaLibs\OpenGL\Assimp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>irrKlang.lib;freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -105,12 +105,12 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\MaLibs\Assimp\include;C:\MaLibs\OpenGL\Assimp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\MaLibs\irrKlang\include;C:\MaLibs\Assimp\include;C:\MaLibs\OpenGL\Assimp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>irrKlang.lib;freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -129,7 +129,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\..\..\..\..\MaLibs\OpenGL\GLAD\src\glad.c" />
+    <ClCompile Include="BallObject.cpp" />
     <ClCompile Include="Game.cpp" />
+    <ClCompile Include="GameLevel.cpp" />
+    <ClCompile Include="GameObject.cpp" />
     <ClCompile Include="Imgui\imgui.cpp" />
     <ClCompile Include="Imgui\imgui_demo.cpp" />
     <ClCompile Include="Imgui\imgui_draw.cpp" />
@@ -137,18 +140,25 @@
     <ClCompile Include="Imgui\imgui_impl_opengl3.cpp" />
     <ClCompile Include="Imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Particle.cpp" />
+    <ClCompile Include="PostProcessor.cpp" />
+    <ClCompile Include="PowerUp.cpp" />
     <ClCompile Include="ResourceManager.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="Shader.h" />
     <ClCompile Include="SpriteRenderer.cpp" />
+    <ClCompile Include="TextRenderer.cpp" />
     <ClCompile Include="Texture.cpp" />
     <ClCompile Include="Utility\CheckCin.cpp" />
     <ClCompile Include="Utility\PRNG.cpp" />
     <ClCompile Include="Utility\Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BallObject.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="GameLevel.h" />
+    <ClInclude Include="GameObject.h" />
     <ClInclude Include="Imgui\imconfig.h" />
     <ClInclude Include="Imgui\imgui.h" />
     <ClInclude Include="Imgui\imgui_impl_glfw.h" />
@@ -159,9 +169,13 @@
     <ClInclude Include="Imgui\imstb_truetype.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="Particle.h" />
+    <ClInclude Include="PostProcessor.h" />
+    <ClInclude Include="PowerUp.h" />
     <ClInclude Include="ResourceManager.h" />
     <ClInclude Include="SpriteRenderer.h" />
     <ClInclude Include="stb_image.h" />
+    <ClInclude Include="TextRenderer.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="Utility\Headers\CheckCin.h" />
     <ClInclude Include="Utility\Headers\PRNG.h" />
@@ -185,6 +199,8 @@
     <None Include="shaders\lightingcommon.glsl" />
     <None Include="shaders\material.frag" />
     <None Include="shaders\materialmap.frag" />
+    <None Include="shaders\particle.frag" />
+    <None Include="shaders\particle.vert" />
     <None Include="shaders\phong.frag" />
     <None Include="shaders\reflection.frag" />
     <None Include="shaders\reflection.vert" />

@@ -29,15 +29,15 @@
 #include "Imgui/imgui_impl_glfw.h"
 #include <stdio.h>
 
+#include "Game.h"
+
 //callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void processInput(GLFWwindow* window);
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 unsigned int loadCubemap(std::vector<std::string> faces);
-void renderScene(const Shader &shader);
 void renderCube();
-void renderQuad();
 void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);
 
 GLenum glCheckError_(const char *file, int line);
@@ -45,8 +45,8 @@ GLenum glCheckError_(const char *file, int line);
 void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 
 // settings
-const unsigned int SCR_WIDTH = 1000;
-const unsigned int SCR_HEIGHT = 1000;
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
 float heightScale = 0.3f;
 float exposure = 1.0f;
 
@@ -57,8 +57,6 @@ float lastY = 600.0 / 2.0;
 
 float deltaTime = 0.0f;	// Time between current frame and last frame
 float lastFrame = 0.0f; // Time of last frame
-
-Camera myCamera;
 
 struct Character 
 {
@@ -71,6 +69,8 @@ struct Character
 std::map<GLchar, Character> Characters;
 GLuint textVAO, VBO;
 
+Game game(SCR_WIDTH, SCR_HEIGHT);
+
 float lerp(float a, float b, float f)
 {
 	return a + f * (b - a);
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 	glfwInit();
 
 	// GL 3.0 + GLSL 130
-	const char* glsl_version = "#version 330";
+	const char* glsl_version = "#version 430";
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -97,6 +97,7 @@ int main(int argc, char *argv[])
 	}
 	glfwMakeContextCurrent(window);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
 
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
@@ -119,6 +120,8 @@ int main(int argc, char *argv[])
 
 	stbi_set_flip_vertically_on_load(false);
 
+	game.Init();
+
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -134,290 +137,12 @@ int main(int argc, char *argv[])
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	myCamera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
-
-	float skyboxVertices[] = {
-		// positions          
-		-1.0f,  1.0f, -1.0f,
-		-1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-		 1.0f,  1.0f, -1.0f,
-		-1.0f,  1.0f, -1.0f,
-
-		-1.0f, -1.0f,  1.0f,
-		-1.0f, -1.0f, -1.0f,
-		-1.0f,  1.0f, -1.0f,
-		-1.0f,  1.0f, -1.0f,
-		-1.0f,  1.0f,  1.0f,
-		-1.0f, -1.0f,  1.0f,
-
-		 1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-
-		-1.0f, -1.0f,  1.0f,
-		-1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f, -1.0f,  1.0f,
-		-1.0f, -1.0f,  1.0f,
-
-		-1.0f,  1.0f, -1.0f,
-		 1.0f,  1.0f, -1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		-1.0f,  1.0f,  1.0f,
-		-1.0f,  1.0f, -1.0f,
-
-		-1.0f, -1.0f, -1.0f,
-		-1.0f, -1.0f,  1.0f,
-		 1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-		-1.0f, -1.0f,  1.0f,
-		 1.0f, -1.0f,  1.0f
-	};
-
-	std::vector<std::string> faces
-	{
-		"textures/lightblue/right.png",
-		"textures/lightblue/left.png",
-		"textures/lightblue/top.png",
-		"textures/lightblue/bottom.png",
-		"textures/lightblue/front.png",
-		"textures/lightblue/back.png",
-	};
-
-
-	Shader gBufferShader = ResourceManager::LoadShader("shaders/vertex.vert", "shaders/ssaogbuffershader.frag", nullptr, "gBufferShader");
-	Shader lightingPassShader = ResourceManager::LoadShader("shaders/texture.vert", "shaders/gviewspacelighting.frag", nullptr, "lightingPassShader");
-	Shader ssaoShader = ResourceManager::LoadShader("shaders/texture.vert", "shaders/ssaoshader.frag", nullptr, "ssaoShader");
-	Shader ssaoBlurShader = ResourceManager::LoadShader("shaders/texture.vert", "shaders/ssaoblurshader.frag", nullptr, "ssaoBlurShader");
-
-	Shader skyboxShader = ResourceManager::LoadShader("shaders/skybox.vert", "shaders/skybox.frag", nullptr, "skyboxShader");
-	Shader colorShader = ResourceManager::LoadShader("shaders/vertex.vert", "shaders/color.frag", nullptr, "colorShader");
-
-	//Shader fontShader("shaders/font.vert", "shaders/font.frag");
-	Shader fontShader = ResourceManager::LoadShader("shaders/font.vert", "shaders/font.frag", nullptr, "fontShader");
-
-	//init FreeType
-	FT_Library ft;
-	if (FT_Init_FreeType(&ft))
-		std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
-	FT_Face face;
-	if (FT_New_Face(ft, "fonts/zeldadxt.ttf", 0, &face))
-		std::cout << "ERROR::FREETYPE: Failed to load font" << std::endl;
-	FT_Set_Pixel_Sizes(face, 0, 48);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Disable byte-alignment restriction
-	for (GLubyte c = 0; c < 128; c++)
-	{
-		// Load character glyph 
-		if (FT_Load_Char(face, c, FT_LOAD_RENDER))
-		{
-			std::cout << "ERROR::FREETYTPE: Failed to load Glyph" << std::endl;
-			continue;
-		}
-		// Generate texture
-		GLuint texture;
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_RED,
-			face->glyph->bitmap.width,
-			face->glyph->bitmap.rows,
-			0,
-			GL_RED,
-			GL_UNSIGNED_BYTE,
-			face->glyph->bitmap.buffer
-		);
-		// Set texture options
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		// Now store character for later use
-		Character character = {
-			texture,
-			glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
-			glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
-			face->glyph->advance.x
-		};
-		Characters.insert(std::pair<GLchar, Character>(c, character));
-	}
-
-	FT_Done_Face(face);
-	FT_Done_FreeType(ft);
-
-	glGenVertexArrays(1, &textVAO);
-	glGenBuffers(1, &VBO);
-	glBindVertexArray(textVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
-
-	//Model SponzaModel("models/Sponza/sponza.obj");
-	Model testModel("models/zero/Zero.fbx");
-	Model floor("models/plane.fbx");
-	unsigned int skyboxVAO, skyboxVBO;
-	glGenVertexArrays(1, &skyboxVAO);
-	glGenBuffers(1, &skyboxVBO);
-	glBindVertexArray(skyboxVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-	glBindVertexArray(0);
-
-	unsigned int skyboxTexture = loadCubemap(faces);
-	Texture2D diff = ResourceManager::LoadTexture("textures/wood.png", false, "diff");
-	Texture2D spec = ResourceManager::LoadTexture("textures/eye.png", false, "spec");
-	Texture2D norm = ResourceManager::LoadTexture("textures/toy_box_normal.png", false, "norm");
-	Texture2D depth = ResourceManager::LoadTexture("textures/toy_box_disp.png", false, "depth");
-	Texture2D black = ResourceManager::LoadTexture("textures/black.png", false, "black");
-
-	unsigned int uniformBlockIndex = glGetUniformBlockIndex(gBufferShader.ID, "Matrices");
-	glUniformBlockBinding(gBufferShader.ID, uniformBlockIndex, 0);
-	glUniformBlockBinding(colorShader.ID, uniformBlockIndex, 0);
-
-	unsigned int uboMatrices;
-	glGenBuffers(1, &uboMatrices);
-	glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
-	glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
-	glBindBuffer(GL_UNIFORM_BUFFER, 0);
-	// define the range of the buffer that links to a uniform binding point
-	glBindBufferRange(GL_UNIFORM_BUFFER, 0, uboMatrices, 0, 2 * sizeof(glm::mat4));
-
-	//ModelViewProjectionMatricis 
-	glm::mat4 model = glm::mat4(1.0f);
-	glm::mat4 view = glm::mat4(1.0f);
-	glm::mat4 projection = glm::perspective(glm::radians(myCamera.Zoom), (float)SCR_HEIGHT / (float)SCR_HEIGHT, 0.1f, 100.0f); 	// note that we're translating the scene in the reverse direction of where we want to move	
-	glm::mat4 textProjection = glm::ortho(0.0f, (float)SCR_WIDTH, 0.0f, (float)SCR_HEIGHT);
-	fontShader.Use();
-	fontShader.setMat4("projection", textProjection);
-
-	glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
-	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection));
-	glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-	// configure g-buffer framebuffer
-  // ------------------------------
-	unsigned int gBuffer;
-	glGenFramebuffers(1, &gBuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-	unsigned int gPosition, gNormal, gAlbedoSpec;
-	// position color buffer
-	glGenTextures(1, &gPosition);
-	glBindTexture(GL_TEXTURE_2D, gPosition);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
-	// normal color buffer
-	glGenTextures(1, &gNormal);
-	glBindTexture(GL_TEXTURE_2D, gNormal);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
-	// color + specular color buffer
-	glGenTextures(1, &gAlbedoSpec);
-	glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedoSpec, 0);
-	// tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
-	unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-	glDrawBuffers(3, attachments);
-	// create and attach depth buffer (renderbuffer)
-	unsigned int rboDepth;
-	glGenRenderbuffers(1, &rboDepth);
-	glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
-	// finally check if framebuffer is complete
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "Framebuffer not complete!" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	// also create framebuffer to hold SSAO processing stage 
-   // -----------------------------------------------------
-	unsigned int ssaoFBO, ssaoBlurFBO;
-	glGenFramebuffers(1, &ssaoFBO);  glGenFramebuffers(1, &ssaoBlurFBO);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
-	unsigned int ssaoColorBuffer, ssaoColorBufferBlur;
-	// SSAO color buffer
-	glGenTextures(1, &ssaoColorBuffer);
-	glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBuffer, 0);
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "SSAO Framebuffer not complete!" << std::endl;
-
-	// and blur stage
-	glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
-	glGenTextures(1, &ssaoColorBufferBlur);
-	glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssaoColorBufferBlur, 0);
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "SSAO Blur Framebuffer not complete!" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
-	// generate sample kernel
-   // ----------------------
-	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0); // generates random floats between 0.0 and 1.0
-	std::default_random_engine generator;
-	std::vector<glm::vec3> ssaoKernel;
-	for (unsigned int i = 0; i < 64; ++i)
-	{
-		glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
-		sample = glm::normalize(sample);
-		sample *= randomFloats(generator);
-		float scale = float(i) / 64.0;
-
-		// scale samples s.t. they're more aligned to center of kernel
-		scale = lerp(0.1f, 1.0f, scale * scale);
-		sample *= scale;
-		ssaoKernel.push_back(sample);
-	}
-
-	// generate noise texture
-	// ----------------------
-	std::vector<glm::vec3> ssaoNoise;
-	for (unsigned int i = 0; i < 16; i++)
-	{
-		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f); // rotate around z-axis (in tangent space)
-		ssaoNoise.push_back(noise);
-	}
-	unsigned int noiseTexture; glGenTextures(1, &noiseTexture);
-	glBindTexture(GL_TEXTURE_2D, noiseTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, 4, 4, 0, GL_RGB, GL_FLOAT, &ssaoNoise[0]);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glfwSetKeyCallback(window, key_callback);
 
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_DEPTH_TEST);
 	glEnable(GL_STENCIL_TEST);
 	glEnable(GL_BLEND);
 	glEnable(GL_CULL_FACE);
@@ -429,21 +154,6 @@ int main(int argc, char *argv[])
 
 	//glfwWindowHint(GLFW_SAMPLES, 4);
 	//glEnable(GL_MULTISAMPLE);
-
-
-	// lighting info
-	// -------------
-	glm::vec3 lightPos(0, 4, 1);
-	glm::vec3 lightColor(1);
-	float constant = 1.0f; // note that we don't send this to the shader, we assume it is always 1.0 (in our case)
-	float linear = 0.7f;
-	float quadratic = 1.8f;
-
-	glm::vec3 modelPosition(0, 0, 0);
-	glm::vec3 modelRotation(-90, 0, 0);
-	glm::vec3 modelScale(5);
-
-	bool occlusion = false;
 
 	// render loop
 	while (!glfwWindowShouldClose(window))
@@ -459,192 +169,14 @@ int main(int argc, char *argv[])
 		lastFrame = currentTime;
 
 		// input
-		processInput(window);
-
-		// render
-		// ------
-		float near_plane = 1.0f, far_plane = 25.0f;
-
-		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-		glCullFace(GL_BACK);
-
-		// reset viewport
-		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		view = glm::lookAt(myCamera.Position, myCamera.Position + myCamera.Front, myCamera.Up);
-		glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
-		glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
-		glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-		gBufferShader.Use();
-		glActiveTexture(GL_TEXTURE0);
-		diff.Bind();
-		gBufferShader.setInt("material.texture_diffuse", 0);
-		glActiveTexture(GL_TEXTURE1);
-		spec.Bind();
-		gBufferShader.setInt("material.texture_specular", 1);
-		glActiveTexture(GL_TEXTURE2);
-		norm.Bind();
-		gBufferShader.setInt("material.texture_normal", 2);
-		glActiveTexture(GL_TEXTURE3);
-		depth.Bind();
-		gBufferShader.setInt("material.texture_depth", 3);
-		gBufferShader.setFloat("material.heightscale", heightScale); // adjust with Q and E keys
+		game.ProcessInput(deltaTime);
+		game.Update(deltaTime);
 		
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0,0,1.0f));
-		model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1, 0, 0));
-		model = glm::scale(model, glm::vec3(0.05f));
-		gBufferShader.setMat4("model", model);
-		gBufferShader.setVec3("cameraPos", myCamera.Position);
-		floor.Draw(gBufferShader);
-
-		glActiveTexture(GL_TEXTURE2);
-		black.Bind();
-		gBufferShader.setInt("material.texture_normal", 2);
-		glActiveTexture(GL_TEXTURE3);
-		black.Bind();
-		gBufferShader.setInt("material.texture_depth", 3);
-
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, modelPosition);
-		model = glm::scale(model, glm::vec3(0.05f));
-		model = glm::rotate(model, glm::radians(modelRotation.x), glm::vec3(1, 0, 0));
-		model = glm::rotate(model, glm::radians(modelRotation.y), glm::vec3(0, 1, 0));
-		model = glm::rotate(model, glm::radians(modelRotation.z), glm::vec3(0, 0, 1));
-		model = glm::scale(model, modelScale);
-		gBufferShader.setMat4("model", model);
-		testModel.Draw(gBufferShader);
-
-		// 2. generate SSAO texture
-		// ------------------------
-		glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ssaoShader.Use();
-		// Send kernel + rotation 
-		for (unsigned int i = 0; i < 64; ++i)
-			ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
-		ssaoShader.setMat4("projection", projection);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, gPosition);
-		ssaoShader.setInt("gPosition", 0);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, gNormal);
-		ssaoShader.setInt("gNormal", 1);
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, noiseTexture);
-		ssaoShader.setInt("texNoise", 2);
-		renderQuad();
-
-		// 3. blur SSAO texture to remove noise
-		// ------------------------------------
-		glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlurFBO);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ssaoBlurShader.Use();
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, ssaoColorBuffer);
-		ssaoBlurShader.setInt("ssaoInput", 0);
-		renderQuad();
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glDisable(GL_DEPTH_TEST);
-		// reset viewport
-		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-		glClearColor(0, 0, 0, 0);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		// render render map to quad for visual 
-		// ---------------------------------------------
-		lightingPassShader.Use();
-		lightingPassShader.setBool("occlusion", occlusion);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, gPosition);
-		lightingPassShader.setInt("gPosition", 0);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, gNormal);
-		lightingPassShader.setInt("gNormal", 1);
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-		lightingPassShader.setInt("gAlbedoSpec", 2);
-		glActiveTexture(GL_TEXTURE3);
-		glBindTexture(GL_TEXTURE_2D, ssaoColorBufferBlur);
-		lightingPassShader.setInt("ssao", 3);
-		lightingPassShader.setVec3("viewPos", myCamera.Position);
-		lightingPassShader.setVec3("lights[0].Position", lightPos);		
-		lightingPassShader.setVec3("lights[0].Color", lightColor);
-		lightingPassShader.setMat4("viewMatrix", view);
-
-		// update attenuation parameters and calculate radius
-		lightingPassShader.setFloat("lights[0].Linear", linear);
-		lightingPassShader.setFloat("lights[0].Quadratic", quadratic);
-		// then calculate radius of light volume/sphere
-		const float maxBrightness = std::fmaxf(std::fmaxf(lightColor.r, lightColor.g), lightColor.b);
-		float radius = (-linear + std::sqrt(linear * linear - 4 * quadratic * (constant - (256.0f / 5.0f) * maxBrightness))) / (2.0f * quadratic);
-		lightingPassShader.setFloat("lights[0].Radius", radius);
-
-		renderQuad();
-
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
-		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
-		glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		glEnable(GL_DEPTH_TEST);
-
-		// now render light cubes as before
 		
-		colorShader.Use();
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, lightPos);
-		model = glm::scale(model, glm::vec3(0.3f));
-		colorShader.setMat4("model", model);
-		colorShader.setVec3("color", lightColor);
-		renderCube();
+		game.Render();
 
-		// draw skybox
-		glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
 
-		skyboxShader.Use();
-		view = glm::mat4(glm::mat3(myCamera.GetViewMatrix()));
-		skyboxShader.setMat4("projection", projection);
-		skyboxShader.setMat4("view", view);
-
-		glBindVertexArray(skyboxVAO);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-		glDepthFunc(GL_LESS); // set depth function back to default
-		
-		RenderText(fontShader, "Akli was here", 25, 960, 1.0f, lightColor);
-		RenderText(fontShader, "This font is very nostalgic", 25.0f, 25.0f, 1.0f, lightColor);
-
-		{
-			ImGui::Begin("Stats");
-			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-			ImGui::End();
-		}
-
-		{
-			ImGui::Begin("Light Editor");
-			ImGui::DragFloat3("light position", (float*)&lightPos.x, 0.10f);
-			ImGui::ColorEdit3("light color", (float*)&lightColor.x, 0.10f);
-			ImGui::DragFloat("light constant", (float*)&constant, 0.10f);
-			ImGui::DragFloat("light linear", (float*)&linear, 0.10f);
-			ImGui::DragFloat("light quadratic", (float*)&quadratic, 0.10f);
-			ImGui::End();
-		}
-
-		{
-			ImGui::Begin("Model Editor");
-			ImGui::DragFloat3("model position", (float*)&modelPosition.x, 0.10f);
-			ImGui::DragFloat3("model rotation", (float*)&modelRotation.x, 0.10f);
-			ImGui::DragFloat3("model scale", (float*)&modelScale.x, 0.10f);
-			ImGui::Checkbox("Show SSAO", &occlusion);
-			ImGui::End();
-		}
-
-		// Rendering
+		// Render gui
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -656,20 +188,9 @@ int main(int argc, char *argv[])
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
-	glDeleteVertexArrays(1, &skyboxVAO);
-	glDeleteBuffers(1, &skyboxVBO);
-	glDeleteBuffers(1, &uboMatrices);
-	glDeleteBuffers(1, &gBuffer);
 	glfwTerminate();
 
 	return 0;
-}
-
-// renders the 3D scene
-// --------------------
-void renderScene(const Shader &shader)
-{
-
 }
 
 // renderCube() renders a 1x1 3D cube in NDC.
@@ -757,10 +278,10 @@ void renderQuad()
 	{
 		float quadVertices[] = {
 			// positions        // texture Coords
-			-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,
-			-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
-			 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,
-			 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,
+			-1.0f,  1.0f, 0.0f, 1.0f,
+			-1.0f, -1.0f, 0.0f, 0.0f,
+			 1.0f,  1.0f, 1.0f, 1.0f,
+			 1.0f, -1.0f, 1.0f, 0.0f,
 		};
 		// setup plane VAO
 		glGenVertexArrays(1, &quadVAO);
@@ -769,11 +290,8 @@ void renderQuad()
 		glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
 		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-		glEnableVertexAttribArray(3);
-		glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+		
 	}
 	glBindVertexArray(quadVAO);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -824,7 +342,7 @@ void RenderText(Shader &s, std::string text, GLfloat x, GLfloat y, GLfloat scale
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void processInput(GLFWwindow* window)
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
@@ -840,31 +358,15 @@ void processInput(GLFWwindow* window)
 
 	if (!guiMode)
 	{
-		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-			myCamera.ProcessKeyboard(Camera_Movement::FORWARD, deltaTime);
-		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-			myCamera.ProcessKeyboard(Camera_Movement::BACKWARD, deltaTime);
-		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-			myCamera.ProcessKeyboard(Camera_Movement::LEFT, deltaTime);
-		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-			myCamera.ProcessKeyboard(Camera_Movement::RIGHT, deltaTime);
-		if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-			myCamera.ProcessKeyboard(Camera_Movement::UP, deltaTime);
-		if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-			myCamera.ProcessKeyboard(Camera_Movement::DOWN, deltaTime);
-
-		if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS)
+		if (key >= 0 && key < 1024)
 		{
-			if (heightScale > 0.0f)
-				heightScale -= 0.005f;
-			else
-				heightScale = 0.0f;
-		}
-		else if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS)
-		{
-
-			heightScale += 0.005f;
-
+			if (action == GLFW_PRESS)
+				game.Keys[key] = GL_TRUE;
+			else if (action == GLFW_RELEASE)
+			{
+				game.Keys[key] = GL_FALSE;
+				game.KeysProcessed[key] = GL_FALSE;
+			}
 		}
 	}
 }
@@ -885,15 +387,14 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 	lastX = xpos;
 	lastY = ypos;
 
-	if (!guiMode)
-		myCamera.ProcessMouseMovement(xoffset, yoffset);
+	
 }
 
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-	myCamera.ProcessMouseScroll(yoffset);
+	
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
