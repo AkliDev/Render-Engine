@@ -88,7 +88,7 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>SDL2.lib;irrKlang.lib;freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>NotSet</SubSystem>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
