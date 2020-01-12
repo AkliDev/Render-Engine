@@ -70,8 +70,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\MaLibs\irrKlang\include;C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\MaLibs\irrKlang\lib\Win32-visualStudio;C:\MaLibs\freetype-windows-binaries-master\win32;C:\MaLibs\OpenGL\Assimp\lib;C:\MaLibs\OpenGL\GLFW\lib-vc2019;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\MaLibs\SDL2\include;C:\MaLibs\irrKlang\include;C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\MaLibs\SDL2\lib\x86;C:\MaLibs\irrKlang\lib\Win32-visualStudio;C:\MaLibs\freetype-windows-binaries-master\win32;C:\MaLibs\OpenGL\Assimp\lib;C:\MaLibs\OpenGL\GLFW\lib-vc2019;$(LibraryPath)</LibraryPath>
+    <IntDir>c</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <IncludePath>C:\MaLibs\irrKlang\include;C:\MaLibs\freetype-windows-binaries-master\include;C:\MaLibs\OpenGL\Assimp\include;C:\MaLibs\OpenGL\glm;C:\MaLibs\OpenGL\GLAD\include;C:\MaLibs\OpenGL\GLFW\include;$(IncludePath)</IncludePath>
@@ -86,7 +87,8 @@
       <AdditionalIncludeDirectories>C:\MaLibs\irrKlang\include;C:\MaLibs\Assimp\include;C:\MaLibs\OpenGL\Assimp\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>irrKlang.lib;freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL2.lib;irrKlang.lib;freetype.lib;opengl32.lib;glfw3.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

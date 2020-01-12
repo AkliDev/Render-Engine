@@ -1,5 +1,8 @@
 #include <glad/glad.h>
-#include <GLFW/glfw3.h>
+#include <stdio.h>
+
+#include <SDL.h>
+#include <SDL_opengl.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -27,9 +30,13 @@
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_opengl3.h"
 #include "Imgui/imgui_impl_glfw.h"
-#include <stdio.h>
+
 
 #include "Game.h"
+
+bool Init();
+bool GLInit();
+void Close();
 
 //callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -43,6 +50,15 @@ void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat 
 GLenum glCheckError_(const char *file, int line);
 #define glCheckError() glCheckError_(__FILE__, __LINE__) 
 void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
+
+//The window we'll be rendering to
+SDL_Window* gWindow = NULL;
+
+//OpenGL context
+SDL_GLContext gContext;
+
+//GLSL version
+const char* glsl_version = "#version 430";
 
 // settings
 const unsigned int SCR_WIDTH = 800;
@@ -78,68 +94,41 @@ float lerp(float a, float b, float f)
 
 int main(int argc, char *argv[])
 {
-	SetSeed();
-	glfwInit();
 
-	// GL 3.0 + GLSL 130
-	const char* glsl_version = "#version 430";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-
-	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
-	if (window == NULL)
+	//Start up SDL and create window
+	if (!Init())
 	{
-		std::cout << "Failed to create GLFW window" << std::endl;
-		glfwTerminate();
-		return -1;
+		printf("Failed to initialize!\n");
+		return 1;
 	}
-	glfwMakeContextCurrent(window);
-	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	if (!GLInit())
 	{
-		std::cout << "Failed to initialize GLAD" << std::endl;
-		glfwTerminate();
-		return -1;
+		printf("Failed to initialize!\n");
+		return 1;
 	}
-
-
-	GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
-	{
-		glEnable(GL_DEBUG_OUTPUT);
-		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-		glDebugMessageCallback(glDebugOutput, nullptr);
-		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
-	}
-
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	stbi_set_flip_vertically_on_load(false);
 
 	game.Init();
 
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	//// Setup Dear ImGui context
+	//IMGUI_CHECKVERSION();
+	//ImGui::CreateContext();
+	//ImGuiIO& io = ImGui::GetIO(); (void)io;
+	////io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	////io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsClassic();
+	//// Setup Dear ImGui style
+	//ImGui::StyleColorsDark();
+	////ImGui::StyleColorsClassic();
 
-	// Setup Platform/Renderer bindings
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	//// Setup Platform/Renderer bindings
+	//ImGui_ImplGlfw_InitForOpenGL(window, true);
+	//ImGui_ImplOpenGL3_Init(glsl_version);
 
-	glfwSetCursorPosCallback(window, mouse_callback);
+	/*glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
-	glfwSetKeyCallback(window, key_callback);
+	glfwSetKeyCallback(window, key_callback);*/
 
 	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	glDisable(GL_DEPTH_TEST);
@@ -156,42 +145,117 @@ int main(int argc, char *argv[])
 	//glEnable(GL_MULTISAMPLE);
 
 	// render loop
-	while (!glfwWindowShouldClose(window))
+	while (true)
 	{
-		glfwPollEvents();
-		// feed inputs to dear imgui, start new frame
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+		//glfwPollEvents();
+		//// feed inputs to dear imgui, start new frame
+		//ImGui_ImplOpenGL3_NewFrame();
+		//ImGui_ImplGlfw_NewFrame();
+		//ImGui::NewFrame();
 
-		float currentTime = glfwGetTime();
+		float currentTime = SDL_GetTicks();
 		deltaTime = currentTime - lastFrame;
 		lastFrame = currentTime;
 
 		// input
 		game.ProcessInput(deltaTime);
 		game.Update(deltaTime);
-		
-		
+
 		game.Render();
 
-
-		// Render gui
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		//// Render gui
+		//ImGui::Render();
+		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		// swap the buffer
-		glfwSwapBuffers(window);
+		SDL_GL_SwapWindow(gWindow);
 	}
 
-	ImGui_ImplOpenGL3_Shutdown();
+	/*ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+	ImGui::DestroyContext();*/
 
-	glfwTerminate();
+	Close();
 
 	return 0;
 }
+
+bool Init()
+{
+	//Initialization flag
+	bool success = true;
+
+	//Initialize SDL
+	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+	{
+		printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
+		success = false;
+	}
+	else
+	{
+		SetSeed();
+		// GL 3.0 + GLSL 130		
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4.3);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+
+		SDL_Window *window = SDL_CreateWindow("SDL test", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCR_WIDTH, SCR_HEIGHT, SDL_WINDOW_OPENGL);
+		// Check that the window was successfully created
+		if (window == NULL) {
+			// In the case that the window could not be made...
+			printf("Could not create window: %s\n", SDL_GetError());
+			success = false;
+		}
+		//Create context
+		gContext = SDL_GL_CreateContext(gWindow);
+		if (gContext == NULL)
+		{
+			printf("OpenGL context could not be created! SDL Error: %s\n", SDL_GetError());
+			success = false;
+		}
+		SDL_GL_MakeCurrent(window, gContext);
+		//glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+	}
+	return success;
+}
+
+bool GLInit()
+{
+	//Success flag
+	bool success = true;
+
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	{
+		std::cout << "Failed to initialize GLAD" << std::endl;
+		glfwTerminate();
+		success = false;
+	}
+	else
+	{
+		GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
+		if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+		{
+			glEnable(GL_DEBUG_OUTPUT);
+			glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+			glDebugMessageCallback(glDebugOutput, nullptr);
+			glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+		}
+	}
+
+	return success;
+}
+
+void Close()
+{
+	//Destroy window	
+	SDL_DestroyWindow(gWindow);
+	gWindow = NULL;
+
+	//Quit SDL subsystems
+	SDL_Quit();
+}
+
 
 // renderCube() renders a 1x1 3D cube in NDC.
 // -------------------------------------------------
