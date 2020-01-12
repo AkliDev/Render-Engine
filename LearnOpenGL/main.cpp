@@ -1,5 +1,5 @@
 #include <glad/glad.h>
-#include <GLFW/glfw3.h>
+#include <SDL.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -27,7 +27,10 @@
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_opengl3.h"
 #include "Imgui/imgui_impl_glfw.h"
+
 #include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "Game.h"
 
@@ -37,17 +40,18 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 unsigned int loadCubemap(std::vector<std::string> faces);
-void renderCube();
 void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);
 
 GLenum glCheckError_(const char *file, int line);
 #define glCheckError() glCheckError_(__FILE__, __LINE__) 
 void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 
-GLFWwindow* gWindow;
+SDL_Window* gWindow;
+SDL_GLContext maincontext;
 const char* glsl_version = "#version 430";
 
 // settings
+const int SCREEN_FULLSCREEN = 0;
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 float heightScale = 0.3f;
@@ -74,6 +78,11 @@ GLuint textVAO, VBO;
 
 Game game(SCR_WIDTH, SCR_HEIGHT);
 
+static void sdl_die(const char * message) {
+	fprintf(stderr, "%s: %s\n", message, SDL_GetError());
+	exit(2);
+}
+
 float lerp(float a, float b, float f)
 {
 	return a + f * (b - a);
@@ -81,20 +90,20 @@ float lerp(float a, float b, float f)
 
 void initImGui()
 {
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	//// Setup Dear ImGui context
+	//IMGUI_CHECKVERSION();
+	//ImGui::CreateContext();
+	//ImGuiIO& io = ImGui::GetIO(); (void)io;
+	////io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	////io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
-	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	//ImGui::StyleColorsClassic();
+	//// Setup Dear ImGui style
+	//ImGui::StyleColorsDark();
+	////ImGui::StyleColorsClassic();
 
-	// Setup Platform/Renderer bindings
-	ImGui_ImplGlfw_InitForOpenGL(gWindow, true);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	//// Setup Platform/Renderer bindings
+	//ImGui_ImplGlfw_InitForOpenGL(gWindow, true);
+	//ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
 bool initGL()
@@ -102,12 +111,12 @@ bool initGL()
 	//Initialization flag
 	bool success = true;
 
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-	{
-		std::cout << "Failed to initialize GLAD" << std::endl;
-		glfwTerminate();
-		return -1;
-	}
+	// Check OpenGL properties
+	printf("OpenGL loaded\n");
+	gladLoadGLLoader(SDL_GL_GetProcAddress);
+	printf("Vendor:   %s\n", glGetString(GL_VENDOR));
+	printf("Renderer: %s\n", glGetString(GL_RENDERER));
+	printf("Version:  %s\n", glGetString(GL_VERSION));
 
 	GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
 	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
@@ -134,34 +143,64 @@ bool initGL()
 	return success;
 }
 
-bool init()
+bool init(const char * caption)
 {
 	//Initialization flag
 	bool success = true;
 
 	SetSeed();
-	glfwInit();
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-
-	gWindow = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Dear ImGui GLFW+OpenGL3 example", NULL, NULL);
-	if (gWindow == NULL)
-	{
-		std::cout << "Failed to create GLFW window" << std::endl;
-		glfwTerminate();
-		success = false;
-	}
+	// Initialize SDL 
+	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+		sdl_die("Couldn't initialize SDL");
+	atexit(SDL_Quit);
+	SDL_GL_LoadLibrary(NULL); // Default OpenGL is fine.
 	
-	glfwMakeContextCurrent(gWindow);
+
+	 // Request an OpenGL 4.5 context (should be core)
+	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+	// Also request a depth buffer
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	//enable debug context
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+
+	// Create the window
+	if (SCREEN_FULLSCREEN) {
+		gWindow = SDL_CreateWindow(
+			caption,
+			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+			0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_OPENGL
+		);
+	}
+	else {
+		gWindow = SDL_CreateWindow(
+			caption,
+			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+			SCR_WIDTH, SCR_HEIGHT, SDL_WINDOW_OPENGL
+		);
+	}
+
+	if (gWindow == NULL) sdl_die("Couldn't set video mode");
+
+	maincontext = SDL_GL_CreateContext(gWindow);
+	if (maincontext == NULL)
+		sdl_die("Failed to create OpenGL context");
+
+	
+
+	// Use v-sync
+	SDL_GL_SetSwapInterval(1);
+	
+	/*glfwMakeContextCurrent(gWindow);
 	glfwSetFramebufferSizeCallback(gWindow, framebuffer_size_callback);
 	glfwSetInputMode(gWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	glfwSetCursorPosCallback(gWindow, mouse_callback);
 	glfwSetScrollCallback(gWindow, scroll_callback);
-	glfwSetKeyCallback(gWindow, key_callback);
+	glfwSetKeyCallback(gWindow, key_callback);*/
 
 	//Initialize OpenGL
 	if (!initGL())
@@ -180,13 +219,13 @@ bool init()
 void runGame()
 {
 	// render loop
-	while (!glfwWindowShouldClose(gWindow))
+	while (true)
 	{
-		glfwPollEvents();
-		// feed inputs to dear imgui, start new frame
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+		//glfwPollEvents();
+		//// feed inputs to dear imgui, start new frame
+		//ImGui_ImplOpenGL3_NewFrame();
+		//ImGui_ImplGlfw_NewFrame();
+		//ImGui::NewFrame();
 
 		float currentTime = glfwGetTime();
 		deltaTime = currentTime - lastFrame;
@@ -200,12 +239,12 @@ void runGame()
 		game.Render();
 
 
-		// Render gui
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		//// Render gui
+		//ImGui::Render();
+		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		// swap the buffer
-		glfwSwapBuffers(gWindow);
+		SDL_GL_SwapWindow(gWindow);
 	}
 }
 
@@ -220,86 +259,10 @@ void close()
 
 int main(int argc, char *argv[])
 {
-
-	init();	
+	init("OpenGL 4.5");
 	runGame();
 	close();
 	return 0;
-}
-
-// renderCube() renders a 1x1 3D cube in NDC.
-// -------------------------------------------------
-unsigned int cubeVAO = 0;
-unsigned int cubeVBO = 0;
-void renderCube()
-{
-	// initialize (if necessary)
-	if (cubeVAO == 0)
-	{
-		float vertices[] = {
-			// back face
-			-1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-			 1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
-			 1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, // bottom-right         
-			 1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
-			-1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-			-1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, // top-left
-			// front face
-			-1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
-			 1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, // bottom-right
-			 1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
-			 1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
-			-1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, // top-left
-			-1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
-			// left face
-			-1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
-			-1.0f,  1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-left
-			-1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
-			-1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
-			-1.0f, -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-right
-			-1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
-			// right face
-			 1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
-			 1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
-			 1.0f,  1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-right         
-			 1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
-			 1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
-			 1.0f, -1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-left     
-			// bottom face
-			-1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
-			 1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, // top-left
-			 1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
-			 1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
-			-1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, // bottom-right
-			-1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
-			// top face
-			-1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
-			 1.0f,  1.0f , 1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
-			 1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, // top-right     
-			 1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
-			-1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
-			-1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left        
-		};
-		glGenVertexArrays(1, &cubeVAO);
-		glGenBuffers(1, &cubeVBO);
-		// fill buffer
-		glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-		// link vertex attributes
-		glBindVertexArray(cubeVAO);
-		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glBindVertexArray(0);
-	}
-	// render Cube
-	glBindVertexArray(cubeVAO);
-	glDrawArrays(GL_TRIANGLES, 0, 36);
-	glBindVertexArray(0);
 }
 
 // renderQuad() renders a 1x1 XY quad in NDC
