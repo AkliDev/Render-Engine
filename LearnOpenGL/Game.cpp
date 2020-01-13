@@ -139,7 +139,7 @@ void Game::ProcessInput(GLfloat dt)
 					Ball->Position.x -= velocity;
 			}
 		}
-		if (this->Keys[SDLK_a])
+		if (this->Keys[SDLK_d])
 		{
 			if (Player->Position.x <= this->Width - Player->Size.x)
 			{
@@ -154,9 +154,9 @@ void Game::ProcessInput(GLfloat dt)
 
 	if (this->State == GAME_WIN)
 	{
-		if (this->Keys[GLFW_KEY_ENTER])
+		if (this->Keys[SDLK_RETURN])
 		{
-			this->KeysProcessed[GLFW_KEY_ENTER] = GL_TRUE;
+			this->KeysProcessed[SDLK_RETURN] = GL_TRUE;
 			Effects->Chaos = GL_FALSE;
 			this->State = GAME_MENU;
 		}
@@ -285,7 +285,7 @@ void Game::DoCollisions()
 	}
 }
 
-void Game::Render()
+void Game::Render(GLfloat time)
 {
 	if (this->State == GAME_ACTIVE || this->State == GAME_MENU)
 	{
@@ -304,13 +304,13 @@ void Game::Render()
 		std::stringstream ss; ss << this->Lives;
 		Text->RenderText("Lives:" + ss.str(), 5.0f, 5.0f, 1.0f);
 		Effects->EndRender();
-		Effects->Render(glfwGetTime());
+		Effects->Render(time);
 	}
 
 	if (this->State == GAME_MENU)
 	{
-		Text->RenderText("Press ENTER to start", 250.0f, Height / 2, 1.0f);
-		Text->RenderText("Press W or S to select level", 245.0f, Height / 2 + 20.0f, 0.75f);
+		Text->RenderText("Press START to begin", 250.0f, Height / 2, 1.0f);
+		Text->RenderText("Press UP or DOWN to select level", 245.0f, Height / 2 + 20.0f, 0.75f);
 	}
 
 	if (this->State == GAME_WIN)
@@ -341,7 +341,7 @@ void Game::SpawnPowerUps(GameObject &block)
 		this->PowerUps.push_back(PowerUp("pad-size-increase", glm::vec3(1.0f, 0.6f, 0.4), 0.0f, block.Position, ResourceManager::GetTexture("powerup_increase")));
 	if (ShouldSpawn(15)) // Negative powerups should spawn more often
 		this->PowerUps.push_back(PowerUp("confuse", glm::vec3(1.0f, 0.3f, 0.3f), 15.0f, block.Position, ResourceManager::GetTexture("powerup_confuse")));
-	if (ShouldSpawn(15))
+	if (ShouldSpawn(1))
 		this->PowerUps.push_back(PowerUp("chaos", glm::vec3(0.9f, 0.25f, 0.25f), 15.0f, block.Position, ResourceManager::GetTexture("powerup_chaos")));
 }
 

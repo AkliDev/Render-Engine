@@ -59,7 +59,7 @@ public:
 	void ProcessInput(GLfloat dt);
 	void Update(GLfloat dt);
 	void DoCollisions();
-	void Render();
+	void Render(GLfloat time);
 
 	void SpawnPowerUps(GameObject &block);
 	void UpdatePowerUps(GLfloat dt);

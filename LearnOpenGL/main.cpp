@@ -39,8 +39,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void key_callback(SDL_KeyboardEvent event);
+void pad_callback(SDL_ControllerButtonEvent event);
 unsigned int loadCubemap(std::vector<std::string> faces);
-void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);
 
 GLenum glCheckError_(const char *file, int line);
 #define glCheckError() glCheckError_(__FILE__, __LINE__) 
@@ -65,18 +65,10 @@ float lastY = 600.0 / 2.0;
 float deltaTime = 0.0f;	// Time between current frame and last frame
 float lastFrame = 0.0f; // Time of last frame
 
-struct Character
-{
-	GLuint     TextureID;  // ID handle of the glyph texture
-	glm::ivec2 Size;       // Size of glyph
-	glm::ivec2 Bearing;    // Offset from baseline to left/top of glyph
-	GLuint     Advance;    // Offset to advance to next glyph
-};
-
-std::map<GLchar, Character> Characters;
-GLuint textVAO, VBO;
-
 Game game(SCR_WIDTH, SCR_HEIGHT);
+
+SDL_GameController* gGameController = NULL;
+const int JOYSTICK_DEAD_ZONE = 8000;
 
 static void sdl_die(const char * message) {
 	fprintf(stderr, "%s: %s\n", message, SDL_GetError());
@@ -151,11 +143,10 @@ bool init(const char * caption)
 	SetSeed();
 
 	// Initialize SDL 
-	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) < 0)
 		sdl_die("Couldn't initialize SDL");
 	atexit(SDL_Quit);
 	SDL_GL_LoadLibrary(NULL); // Default OpenGL is fine.
-
 
 	 // Request an OpenGL 4.5 context (should be core)
 	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
@@ -169,7 +160,7 @@ bool init(const char * caption)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
 	gWindow = SDL_CreateWindow(caption, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCR_WIDTH, SCR_HEIGHT, SDL_WINDOW_OPENGL);
-	
+
 	if (gWindow == NULL) sdl_die("Couldn't set video mode");
 
 	gl_context = SDL_GL_CreateContext(gWindow);
@@ -178,13 +169,6 @@ bool init(const char * caption)
 
 	// Use v-sync
 	SDL_GL_SetSwapInterval(1);
-
-	/*glfwSetFramebufferSizeCallback(gWindow, framebuffer_size_callback);
-	glfwSetInputMode(gWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-	glfwSetCursorPosCallback(gWindow, mouse_callback);
-	glfwSetScrollCallback(gWindow, scroll_callback);
-	glfwSetKeyCallback(gWindow, key_callback);*/
 
 	//Initialize OpenGL
 	if (!initGL())
@@ -197,6 +181,21 @@ bool init(const char * caption)
 	stbi_set_flip_vertically_on_load(false);
 	game.Init();
 
+	//Check for joysticks
+	if (SDL_NumJoysticks() < 1)
+	{
+		printf("Warning: No joysticks connected!\n");
+	}
+	else
+	{
+		//Load joystick
+		gGameController = SDL_GameControllerOpen(0);
+		if (gGameController == NULL)
+		{
+			printf("Warning: Unable to open game controller! SDL Error: %s\n", SDL_GetError());
+		}
+	}
+
 	return success;
 }
 
@@ -206,7 +205,7 @@ void runGame()
 	// render loop
 	while (!shouldProgramClose)
 	{
-		
+
 		while (SDL_PollEvent(&event))
 		{
 			ImGui_ImplSDL2_ProcessEvent(&event);
@@ -216,20 +215,24 @@ void runGame()
 				shouldProgramClose = true;
 			if (event.type == SDL_KEYUP || event.type == SDL_KEYDOWN)
 				key_callback(event.key);
+			if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP)
+				pad_callback(event.cbutton);
+
+
 		}
 		// feed inputs to dear imgui, start new frame
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame(gWindow);
 		ImGui::NewFrame();
 
-		float currentTime = glfwGetTime();
+		float currentTime = SDL_GetTicks() * 0.001;
 		deltaTime = currentTime - lastFrame;
 		lastFrame = currentTime;
 
 		// input
 		game.ProcessInput(deltaTime);
 		game.Update(deltaTime);
-		game.Render();
+		game.Render(currentTime);
 
 		{
 			ImGui::Begin("Hello, world!");
@@ -252,8 +255,15 @@ void close()
 	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
 
+	//Close game controller
+	SDL_GameControllerClose(gGameController);
+	gGameController = NULL;
+
+	//Destroy window  
 	SDL_GL_DeleteContext(gl_context);
 	SDL_DestroyWindow(gWindow);
+	gWindow = NULL;
+	gl_context = NULL;
 	SDL_Quit();
 }
 
@@ -295,53 +305,9 @@ void renderQuad()
 	glBindVertexArray(0);
 }
 
-void RenderText(Shader &s, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color)
-{
-	// Activate corresponding render state	
-	s.Use();
-	s.setVec3("textColor", color);
-	glActiveTexture(GL_TEXTURE0);
-	glBindVertexArray(textVAO);
-
-	// Iterate through all characters
-	std::string::const_iterator c;
-	for (c = text.begin(); c != text.end(); c++)
-	{
-		Character ch = Characters[*c];
-
-		GLfloat xpos = x + ch.Bearing.x * scale;
-		GLfloat ypos = y - (ch.Size.y - ch.Bearing.y) * scale;
-
-		GLfloat w = ch.Size.x * scale;
-		GLfloat h = ch.Size.y * scale;
-		// Update VBO for each character
-		GLfloat vertices[6][4] = {
-			{ xpos,     ypos + h,   0.0, 0.0 },
-			{ xpos,     ypos,       0.0, 1.0 },
-			{ xpos + w, ypos,       1.0, 1.0 },
-
-			{ xpos,     ypos + h,   0.0, 0.0 },
-			{ xpos + w, ypos,       1.0, 1.0 },
-			{ xpos + w, ypos + h,   1.0, 0.0 }
-		};
-		// Render glyph texture over quad
-		glBindTexture(GL_TEXTURE_2D, ch.TextureID);
-		// Update content of VBO memory
-		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		// Render quad
-		glDrawArrays(GL_TRIANGLES, 0, 6);
-		// Now advance cursors for next glyph (note that advance is number of 1/64 pixels)
-		x += (ch.Advance >> 6) * scale; // Bitshift by 6 to get value in pixels (2^6 = 64)
-	}
-	glBindVertexArray(0);
-	glBindTexture(GL_TEXTURE_2D, 0);
-}
-
 void key_callback(SDL_KeyboardEvent key)
 {
-	if(key.keysym.sym == SDLK_ESCAPE && key.state == SDL_PRESSED)
+	if (key.keysym.sym == SDLK_ESCAPE && key.state == SDL_PRESSED)
 		shouldProgramClose = true;
 
 	//if (key.keysym.sym == SDLK_F1 && key.state == SDL_PRESSED)
@@ -363,6 +329,66 @@ void key_callback(SDL_KeyboardEvent key)
 		}
 	}
 	//}
+}
+
+void pad_callback(SDL_ControllerButtonEvent button)
+{
+	
+	if (button.state == SDL_PRESSED)
+	{
+		switch (button.button)
+		{
+		case SDL_CONTROLLER_BUTTON_A:
+			game.Keys[SDLK_SPACE] = GL_TRUE;
+			break;
+		case SDL_CONTROLLER_BUTTON_START:
+			game.Keys[SDLK_RETURN] = GL_TRUE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_UP:
+			game.Keys[SDLK_w] = GL_TRUE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+			game.Keys[SDLK_s] = GL_TRUE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+			game.Keys[SDLK_a] = GL_TRUE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+			game.Keys[SDLK_d] = GL_TRUE;
+			break;
+		}
+	}
+	else if (button.state == SDL_RELEASED)
+	{
+		switch (button.button)
+		{
+		case SDL_CONTROLLER_BUTTON_A:
+			game.Keys[SDLK_SPACE] = GL_FALSE;
+			game.KeysProcessed[SDLK_SPACE] = GL_FALSE;
+			break;
+		case SDL_CONTROLLER_BUTTON_START:
+			game.Keys[SDLK_RETURN] = GL_FALSE;
+			game.KeysProcessed[SDLK_RETURN] = GL_FALSE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_UP:
+			game.Keys[SDLK_w] = GL_FALSE;
+			game.KeysProcessed[SDLK_w] = GL_FALSE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+			game.Keys[SDLK_s] = GL_FALSE;
+			game.KeysProcessed[SDLK_s] = GL_FALSE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+			game.Keys[SDLK_a] = GL_FALSE;
+			game.KeysProcessed[SDLK_a] = GL_FALSE;
+			break;
+		case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+			game.Keys[SDLK_d] = GL_FALSE;
+			game.KeysProcessed[SDLK_d] = GL_FALSE;
+			break;
+		}
+	}
+
 }
 
 // glfw: whenever the mouse moves, this callback is called
