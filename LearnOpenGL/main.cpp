@@ -26,7 +26,7 @@
 
 #include "Imgui/imgui.h"
 #include "Imgui/imgui_impl_opengl3.h"
-#include "Imgui/imgui_impl_glfw.h"
+#include "Imgui/imgui_impl_sdl.h"
 
 #include <stdio.h>
 #include <cstdio>
@@ -38,7 +38,7 @@
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+void key_callback(SDL_KeyboardEvent event);
 unsigned int loadCubemap(std::vector<std::string> faces);
 void RenderText(Shader &shader, std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color);
 
@@ -47,11 +47,11 @@ GLenum glCheckError_(const char *file, int line);
 void APIENTRY glDebugOutput(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 
 SDL_Window* gWindow;
-SDL_GLContext maincontext;
-const char* glsl_version = "#version 430";
+SDL_GLContext gl_context;
+const char* glsl_version = "#version 450";
+bool shouldProgramClose = false;
 
 // settings
-const int SCREEN_FULLSCREEN = 0;
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 float heightScale = 0.3f;
@@ -90,20 +90,20 @@ float lerp(float a, float b, float f)
 
 void initImGui()
 {
-	//// Setup Dear ImGui context
-	//IMGUI_CHECKVERSION();
-	//ImGui::CreateContext();
-	//ImGuiIO& io = ImGui::GetIO(); (void)io;
-	////io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-	////io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+	// Setup Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
-	//// Setup Dear ImGui style
-	//ImGui::StyleColorsDark();
-	////ImGui::StyleColorsClassic();
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	//ImGui::StyleColorsClassic();
 
-	//// Setup Platform/Renderer bindings
-	//ImGui_ImplGlfw_InitForOpenGL(gWindow, true);
-	//ImGui_ImplOpenGL3_Init(glsl_version);
+	// Setup Platform/Renderer bindings
+	ImGui_ImplSDL2_InitForOpenGL(gWindow, gl_context);
+	ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
 bool initGL()
@@ -155,7 +155,7 @@ bool init(const char * caption)
 		sdl_die("Couldn't initialize SDL");
 	atexit(SDL_Quit);
 	SDL_GL_LoadLibrary(NULL); // Default OpenGL is fine.
-	
+
 
 	 // Request an OpenGL 4.5 context (should be core)
 	SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
@@ -164,38 +164,22 @@ bool init(const char * caption)
 	// Also request a depth buffer
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	//enable debug context
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
-	// Create the window
-	if (SCREEN_FULLSCREEN) {
-		gWindow = SDL_CreateWindow(
-			caption,
-			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-			0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_OPENGL
-		);
-	}
-	else {
-		gWindow = SDL_CreateWindow(
-			caption,
-			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-			SCR_WIDTH, SCR_HEIGHT, SDL_WINDOW_OPENGL
-		);
-	}
-
+	gWindow = SDL_CreateWindow(caption, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCR_WIDTH, SCR_HEIGHT, SDL_WINDOW_OPENGL);
+	
 	if (gWindow == NULL) sdl_die("Couldn't set video mode");
 
-	maincontext = SDL_GL_CreateContext(gWindow);
-	if (maincontext == NULL)
+	gl_context = SDL_GL_CreateContext(gWindow);
+	if (gl_context == NULL)
 		sdl_die("Failed to create OpenGL context");
-
-	
 
 	// Use v-sync
 	SDL_GL_SetSwapInterval(1);
-	
-	/*glfwMakeContextCurrent(gWindow);
-	glfwSetFramebufferSizeCallback(gWindow, framebuffer_size_callback);
+
+	/*glfwSetFramebufferSizeCallback(gWindow, framebuffer_size_callback);
 	glfwSetInputMode(gWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	glfwSetCursorPosCallback(gWindow, mouse_callback);
@@ -212,20 +196,31 @@ bool init(const char * caption)
 	initImGui();
 	stbi_set_flip_vertically_on_load(false);
 	game.Init();
-	
+
 	return success;
 }
 
 void runGame()
 {
+	SDL_Event event;
 	// render loop
-	while (true)
+	while (!shouldProgramClose)
 	{
-		//glfwPollEvents();
-		//// feed inputs to dear imgui, start new frame
-		//ImGui_ImplOpenGL3_NewFrame();
-		//ImGui_ImplGlfw_NewFrame();
-		//ImGui::NewFrame();
+		
+		while (SDL_PollEvent(&event))
+		{
+			ImGui_ImplSDL2_ProcessEvent(&event);
+			if (event.type == SDL_QUIT)
+				shouldProgramClose = true;
+			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(gWindow))
+				shouldProgramClose = true;
+			if (event.type == SDL_KEYUP || event.type == SDL_KEYDOWN)
+				key_callback(event.key);
+		}
+		// feed inputs to dear imgui, start new frame
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplSDL2_NewFrame(gWindow);
+		ImGui::NewFrame();
 
 		float currentTime = glfwGetTime();
 		deltaTime = currentTime - lastFrame;
@@ -234,14 +229,17 @@ void runGame()
 		// input
 		game.ProcessInput(deltaTime);
 		game.Update(deltaTime);
-
-
 		game.Render();
 
+		{
+			ImGui::Begin("Hello, world!");
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+			ImGui::End();
+		}
 
-		//// Render gui
-		//ImGui::Render();
-		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		// Render gui
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		// swap the buffer
 		SDL_GL_SwapWindow(gWindow);
@@ -251,15 +249,17 @@ void runGame()
 void close()
 {
 	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
+	ImGui_ImplSDL2_Shutdown();
 	ImGui::DestroyContext();
 
-	glfwTerminate();
+	SDL_GL_DeleteContext(gl_context);
+	SDL_DestroyWindow(gWindow);
+	SDL_Quit();
 }
 
 int main(int argc, char *argv[])
 {
-	init("OpenGL 4.5");
+	init("Breek Uit");
 	runGame();
 	close();
 	return 0;
@@ -339,33 +339,30 @@ void RenderText(Shader &s, std::string text, GLfloat x, GLfloat y, GLfloat scale
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
+void key_callback(SDL_KeyboardEvent key)
 {
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, true);
+	if(key.keysym.sym == SDLK_ESCAPE && key.state == SDL_PRESSED)
+		shouldProgramClose = true;
 
-	if (glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
-	{
-		guiMode ^= true;
-		if (guiMode)
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-		else
-			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	}
+	//if (key.keysym.sym == SDLK_F1 && key.state == SDL_PRESSED)
+	//{
+	//	guiMode ^= true;
+	//	//SDL_ShowCursor(SDL_DISABLE);
+	//}
 
-	if (!guiMode)
+	//if (!guiMode)
+	//{
+	if (key.keysym.sym >= 0 && key.keysym.sym < 1024)
 	{
-		if (key >= 0 && key < 1024)
+		if (key.state == SDL_PRESSED)
+			game.Keys[key.keysym.sym] = GL_TRUE;
+		else if (key.state == SDL_RELEASED)
 		{
-			if (action == GLFW_PRESS)
-				game.Keys[key] = GL_TRUE;
-			else if (action == GLFW_RELEASE)
-			{
-				game.Keys[key] = GL_FALSE;
-				game.KeysProcessed[key] = GL_FALSE;
-			}
+			game.Keys[key.keysym.sym] = GL_FALSE;
+			game.KeysProcessed[key.keysym.sym] = GL_FALSE;
 		}
 	}
+	//}
 }
 
 // glfw: whenever the mouse moves, this callback is called

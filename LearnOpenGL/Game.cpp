@@ -1,3 +1,4 @@
+#include <SDL_keycode.h>
 #include "Game.h"
 
 #include "ResourceManager.h"
@@ -106,30 +107,30 @@ void Game::ProcessInput(GLfloat dt)
 {
 	if (this->State == GAME_MENU)
     {
-        if (this->Keys[GLFW_KEY_ENTER] && !this->KeysProcessed[GLFW_KEY_ENTER])
+        if (this->Keys[SDLK_RETURN] && !this->KeysProcessed[SDLK_RETURN])
         {
             this->State = GAME_ACTIVE;
-            this->KeysProcessed[GLFW_KEY_ENTER] = GL_TRUE;
+            this->KeysProcessed[SDLK_RETURN] = GL_TRUE;
         }
-        if (this->Keys[GLFW_KEY_W] && !this->KeysProcessed[GLFW_KEY_W])
+        if (this->Keys[SDLK_w] && !this->KeysProcessed[SDLK_w])
         {
             this->Level = (this->Level + 1) % 4;
-            this->KeysProcessed[GLFW_KEY_W] = GL_TRUE;
+            this->KeysProcessed[SDLK_w] = GL_TRUE;
         }
-        if (this->Keys[GLFW_KEY_S] && !this->KeysProcessed[GLFW_KEY_S])
+        if (this->Keys[SDLK_s] && !this->KeysProcessed[SDLK_s])
         {
             if (this->Level > 0)
                 --this->Level;
             else
                 this->Level = 3;
-            this->KeysProcessed[GLFW_KEY_S] = GL_TRUE;
+            this->KeysProcessed[SDLK_s] = GL_TRUE;
         }
     }
 	if (this->State == GAME_ACTIVE)
 	{
 		GLfloat velocity = PLAYER_VELOCITY * dt;
 		// Move playerboard
-		if (this->Keys[GLFW_KEY_A])
+		if (this->Keys[SDLK_a])
 		{
 			if (Player->Position.x >= 0)
 			{
@@ -138,7 +139,7 @@ void Game::ProcessInput(GLfloat dt)
 					Ball->Position.x -= velocity;
 			}
 		}
-		if (this->Keys[GLFW_KEY_D])
+		if (this->Keys[SDLK_a])
 		{
 			if (Player->Position.x <= this->Width - Player->Size.x)
 			{
@@ -147,7 +148,7 @@ void Game::ProcessInput(GLfloat dt)
 					Ball->Position.x += velocity;
 			}
 		}
-		if (this->Keys[GLFW_KEY_SPACE])
+		if (this->Keys[SDLK_SPACE])
 			Ball->Stuck = false;
 	}
 
