@@ -310,14 +310,6 @@ void key_callback(SDL_KeyboardEvent key)
 	if (key.keysym.sym == SDLK_ESCAPE && key.state == SDL_PRESSED)
 		shouldProgramClose = true;
 
-	//if (key.keysym.sym == SDLK_F1 && key.state == SDL_PRESSED)
-	//{
-	//	guiMode ^= true;
-	//	//SDL_ShowCursor(SDL_DISABLE);
-	//}
-
-	//if (!guiMode)
-	//{
 	if (key.keysym.sym >= 0 && key.keysym.sym < 1024)
 	{
 		if (key.state == SDL_PRESSED)
@@ -328,7 +320,6 @@ void key_callback(SDL_KeyboardEvent key)
 			game.KeysProcessed[key.keysym.sym] = GL_FALSE;
 		}
 	}
-	//}
 }
 
 void pad_callback(SDL_ControllerButtonEvent button)
