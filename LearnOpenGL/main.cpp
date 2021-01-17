@@ -35,9 +35,9 @@
 #include "Game.h"
 
 //callbacks
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void mouse_callback(GLFWwindow* window, double xpos, double ypos);
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+//void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+//void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+//void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void key_callback(SDL_KeyboardEvent event);
 void pad_callback(SDL_ControllerButtonEvent event);
 unsigned int loadCubemap(std::vector<std::string> faces);
@@ -384,34 +384,34 @@ void pad_callback(SDL_ControllerButtonEvent button)
 
 // glfw: whenever the mouse moves, this callback is called
 // -------------------------------------------------------
-void mouse_callback(GLFWwindow* window, double xpos, double ypos)
-{
-	if (firstMouse)
-	{
-		lastX = xpos;
-		lastY = ypos;
-		firstMouse = false;
-	}
+//void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+//{
+//	if (firstMouse)
+//	{
+//		lastX = xpos;
+//		lastY = ypos;
+//		firstMouse = false;
+//	}
+//
+//	float xoffset = xpos - lastX;
+//	float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+//	lastX = xpos;
+//	lastY = ypos;
+//
+//
+//}
 
-	float xoffset = xpos - lastX;
-	float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-	lastX = xpos;
-	lastY = ypos;
+//// glfw: whenever the mouse scroll wheel scrolls, this callback is called
+//// ----------------------------------------------------------------------
+//void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+//{
+//
+//}
 
-
-}
-
-// glfw: whenever the mouse scroll wheel scrolls, this callback is called
-// ----------------------------------------------------------------------
-void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-{
-
-}
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-	glViewport(0, 0, width, height);
-}
+//void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+//{
+//	glViewport(0, 0, width, height);
+//}
 
 unsigned int loadCubemap(std::vector<std::string> faces)
 {
