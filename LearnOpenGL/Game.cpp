@@ -341,7 +341,7 @@ void Game::SpawnPowerUps(GameObject &block)
 		this->PowerUps.push_back(PowerUp("pad-size-increase", glm::vec3(1.0f, 0.6f, 0.4), 0.0f, block.Position, ResourceManager::GetTexture("powerup_increase")));
 	if (ShouldSpawn(15)) // Negative powerups should spawn more often
 		this->PowerUps.push_back(PowerUp("confuse", glm::vec3(1.0f, 0.3f, 0.3f), 15.0f, block.Position, ResourceManager::GetTexture("powerup_confuse")));
-	if (ShouldSpawn(1))
+	if (ShouldSpawn(15))
 		this->PowerUps.push_back(PowerUp("chaos", glm::vec3(0.9f, 0.25f, 0.25f), 15.0f, block.Position, ResourceManager::GetTexture("powerup_chaos")));
 }
 
